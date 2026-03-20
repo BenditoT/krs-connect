@@ -1243,13 +1243,15 @@
         presenceChannel
           .on('presence', { event: 'sync' }, () => {
             const state = presenceChannel.presenceState();
-            const onlineIds = new Set();
+            const onlineMap = new Map();
             Object.values(state).forEach(presences => {
               presences.forEach(p => {
-                if (p.user_id) onlineIds.add(p.user_id);
+                if (p.user_id != null) {
+                  onlineMap.set(Number(p.user_id), p);
+                }
               });
             });
-            onPresenceChange(onlineIds);
+            onPresenceChange(onlineMap);
           })
           .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
@@ -1624,7 +1626,7 @@
             },
               React.createElement('div', { className: 'avatar-wrapper' },
                 React.createElement(Avatar, { user: conv.user || { display_name: '?', avatar_color: '#999' }, size: 40 }),
-                React.createElement('span', { className: 'avatar-status online-dot small' + (onlineUsers && onlineUsers.has(conv.user?.id) ? '' : ' offline') })
+                React.createElement('span', { className: 'avatar-status online-dot small' + (onlineUsers && onlineUsers.has(Number(conv.user?.id)) ? '' : ' offline') })
               ),
               React.createElement('div', { className: 'conversation-info' },
                 React.createElement('div', { className: 'conversation-name' }, (conv.user || {}).display_name || 'Unbekannt'),
@@ -1711,11 +1713,11 @@
           onBack && React.createElement('button', { className: 'back-btn', onClick: onBack, dangerouslySetInnerHTML: { __html: Icons.back } }),
           React.createElement('div', { className: 'avatar-wrapper' },
             React.createElement(Avatar, { user: conversation.user || { display_name: 'Chat', avatar_color: '#999' }, size: 32 }),
-            React.createElement('span', { className: 'avatar-status online-dot small' + (onlineUsers && onlineUsers.has(conversation.user?.id) ? '' : ' offline') })
+            React.createElement('span', { className: 'avatar-status online-dot small' + (onlineUsers && onlineUsers.has(Number(conversation.user?.id)) ? '' : ' offline') })
           ),
           React.createElement('div', null,
             React.createElement('span', { className: 'chat-header-name' }, (conversation.user || {}).display_name || 'Chat'),
-            onlineUsers && onlineUsers.has(conversation.user?.id) && React.createElement('div', { style: { fontSize: '11px', color: 'var(--success)', fontWeight: '500' } }, 'Online')
+            onlineUsers && onlineUsers.has(Number(conversation.user?.id)) && React.createElement('div', { style: { fontSize: '11px', color: 'var(--success)', fontWeight: '500' } }, 'Online')
           )
         ),
         React.createElement('div', { className: 'chat-messages' },
@@ -1874,7 +1876,7 @@
       const [unreadPostChannels, setUnreadPostChannels] = useState(new Set());
 
       // Online presence
-      const [onlineUsers, setOnlineUsers] = useState(new Set());
+      const [onlineUsers, setOnlineUsers] = useState(new Map());
       const [showOnlinePanel, setShowOnlinePanel] = useState(false);
 
       const [loadingUsers, setLoadingUsers] = useState(false);
@@ -2092,7 +2094,7 @@
         setConversations([]);
         setSelectedConversation(null);
         setChatMessages([]);
-        setOnlineUsers(new Set());
+        setOnlineUsers(new Map());
         setShowOnlinePanel(false);
       };
 
@@ -2229,7 +2231,7 @@
               onlineUsers.size + ' Online'
             ),
             React.createElement('div', { className: 'online-panel-list' },
-              allUsers.filter(u => onlineUsers.has(u.id)).map(u =>
+              allUsers.filter(u => onlineUsers.has(Number(u.id))).map(u =>
                 React.createElement('div', { key: u.id, className: 'online-panel-user' },
                   React.createElement('div', { className: 'avatar-wrapper' },
                     React.createElement('div', { className: 'avatar', style: { background: u.avatar_color } }, u.display_name?.charAt(0)?.toUpperCase()),
@@ -2239,9 +2241,9 @@
                   u.id === user.id && React.createElement('span', { style: { fontSize: '11px', color: 'var(--text-muted)' } }, '(du)')
                 )
               ),
-              allUsers.filter(u => !onlineUsers.has(u.id)).length > 0 && React.createElement(React.Fragment, null,
+              allUsers.filter(u => !onlineUsers.has(Number(u.id))).length > 0 && React.createElement(React.Fragment, null,
                 React.createElement('div', { style: { padding: '8px 14px 4px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' } }, 'Offline'),
-                allUsers.filter(u => !onlineUsers.has(u.id)).slice(0, 5).map(u =>
+                allUsers.filter(u => !onlineUsers.has(Number(u.id))).slice(0, 5).map(u =>
                   React.createElement('div', { key: u.id, className: 'online-panel-user', style: { opacity: 0.5 } },
                     React.createElement('div', { className: 'avatar-wrapper' },
                       React.createElement('div', { className: 'avatar', style: { background: u.avatar_color } }, u.display_name?.charAt(0)?.toUpperCase()),
