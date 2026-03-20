@@ -1078,6 +1078,63 @@
         }
       }
 
+      async search(query) {
+        if (!query || query.length < 2) return { posts: [], messages: [] };
+        if (this.isDemo) {
+          // Demo: durchsuche Mock-Daten
+          const q = query.toLowerCase();
+          const posts = MOCK_POSTS.Allgemein?.filter(p => (p.content + (p.title || '')).toLowerCase().includes(q)) || [];
+          return { posts, messages: [] };
+        }
+        try {
+          // Posts durchsuchen (Titel + Content)
+          const { data: posts } = await this.sb.from('posts')
+            .select('*, author:users(*), channel:channels(name, team_id)')
+            .or(`content.ilike.%${query}%,title.ilike.%${query}%`)
+            .order('created_at', { ascending: false })
+            .limit(20);
+          // Nachrichten durchsuchen
+          const { data: messages } = await this.sb.from('messages')
+            .select('*, sender:users(*)')
+            .ilike('content', `%${query}%`)
+            .order('created_at', { ascending: false })
+            .limit(20);
+          return { posts: posts || [], messages: messages || [] };
+        } catch (err) {
+          console.error('Search error:', err);
+          return { posts: [], messages: [] };
+        }
+      }
+
+      async createConversation(userId1, userId2) {
+        if (this.isDemo) {
+          return { id: 'new-' + Date.now(), is_group: false };
+        }
+        try {
+          // Prüfe ob schon eine Konversation zwischen den beiden existiert
+          const { data: memberships1 } = await this.sb.from('conversation_members').select('conversation_id').eq('user_id', userId1);
+          const { data: memberships2 } = await this.sb.from('conversation_members').select('conversation_id').eq('user_id', userId2);
+          if (memberships1?.length && memberships2?.length) {
+            const ids1 = new Set(memberships1.map(m => m.conversation_id));
+            const common = memberships2.find(m => ids1.has(m.conversation_id));
+            if (common) return { id: common.conversation_id, is_group: false };
+          }
+          // Neue Konversation erstellen
+          const { data: conv, error: convErr } = await this.sb.from('conversations').insert({ is_group: false }).select().single();
+          if (convErr) throw convErr;
+          // Beide User als Mitglieder hinzufügen
+          const { error: memErr } = await this.sb.from('conversation_members').insert([
+            { conversation_id: conv.id, user_id: userId1 },
+            { conversation_id: conv.id, user_id: userId2 }
+          ]);
+          if (memErr) throw memErr;
+          return conv;
+        } catch (err) {
+          console.error('createConversation error:', err);
+          return null;
+        }
+      }
+
       subscribeToChannel(channelId, onNewPost) {
         if (this.isDemo) return () => {};
         try {
@@ -1152,6 +1209,7 @@
       back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>',
       logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
       x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+      search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
     };
 
     // ============================================================
@@ -1449,7 +1507,7 @@
       );
     }
 
-    function ChatPanel({ conversation, messages, dataService, currentUser, onBack }) {
+    function ChatPanel({ conversation, messages, setMessages, dataService, currentUser, onBack }) {
       const [input, setInput] = useState('');
       const [sending, setSending] = useState(false);
       const messagesEndRef = useRef(null);
@@ -1464,8 +1522,18 @@
         e.preventDefault();
         if (!input.trim() || sending) return;
         setSending(true);
-        await dataService.sendMessage(conversation.id, currentUser.id, input);
-        setInput('');
+        try {
+          const sentMsg = await dataService.sendMessage(conversation.id, currentUser.id, input);
+          if (sentMsg && setMessages) {
+            setMessages(prev => {
+              if (prev.some(m => m.id === sentMsg.id)) return prev;
+              return [...prev, sentMsg];
+            });
+          }
+          setInput('');
+        } catch (err) {
+          console.error('Send failed:', err);
+        }
         setSending(false);
       };
 
@@ -1526,6 +1594,83 @@
     // ============================================================
     // APP COMPONENT
     // ============================================================
+
+    function SearchView({ dataService, user }) {
+      const [query, setQuery] = useState('');
+      const [results, setResults] = useState(null);
+      const [searching, setSearching] = useState(false);
+      const timerRef = useRef(null);
+
+      const handleSearch = (val) => {
+        setQuery(val);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        if (val.length < 2) { setResults(null); return; }
+        timerRef.current = setTimeout(async () => {
+          setSearching(true);
+          const res = await dataService.search(val);
+          setResults(res);
+          setSearching(false);
+        }, 300);
+      };
+
+      return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', height: '100%' } },
+        React.createElement('div', { style: { padding: '16px 20px', borderBottom: '1px solid var(--border)' } },
+          React.createElement('h2', { style: { margin: '0 0 12px', fontSize: '18px', fontWeight: '600' } }, 'Suche'),
+          React.createElement('input', {
+            type: 'text',
+            placeholder: 'Posts und Nachrichten durchsuchen...',
+            value: query,
+            onChange: e => handleSearch(e.target.value),
+            style: { width: '100%', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }
+          })
+        ),
+        React.createElement('div', { style: { flex: 1, overflow: 'auto', padding: '16px 20px' } },
+          searching && React.createElement('div', { style: { textAlign: 'center', color: 'var(--text-muted)', padding: '20px' } }, 'Suche...'),
+          !searching && results && React.createElement(React.Fragment, null,
+            results.posts.length > 0 && React.createElement('div', null,
+              React.createElement('h3', { style: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600', marginBottom: '8px' } }, 'Posts (' + results.posts.length + ')'),
+              results.posts.map(post => {
+                const author = post.author || { display_name: 'Unbekannt', avatar_color: '#999' };
+                return React.createElement('div', { key: post.id, className: 'post-card', style: { marginBottom: '8px' } },
+                  React.createElement('div', { className: 'post-header' },
+                    React.createElement(Avatar, { user: author, size: 32 }),
+                    React.createElement('div', { className: 'post-meta' },
+                      React.createElement('strong', null, author.display_name),
+                      React.createElement('span', { className: 'post-time' }, formatDate(post.created_at))
+                    )
+                  ),
+                  post.title && React.createElement('div', { className: 'post-title' }, post.title),
+                  React.createElement('p', null, post.content)
+                );
+              })
+            ),
+            results.messages.length > 0 && React.createElement('div', { style: { marginTop: '16px' } },
+              React.createElement('h3', { style: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600', marginBottom: '8px' } }, 'Nachrichten (' + results.messages.length + ')'),
+              results.messages.map(msg => {
+                const sender = msg.sender || { display_name: 'Unbekannt', avatar_color: '#999' };
+                return React.createElement('div', { key: msg.id, style: { padding: '10px 14px', background: 'white', borderRadius: '8px', marginBottom: '6px', border: '1px solid var(--border)' } },
+                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' } },
+                    React.createElement(Avatar, { user: sender, size: 24 }),
+                    React.createElement('strong', { style: { fontSize: '13px' } }, sender.display_name),
+                    React.createElement('span', { style: { fontSize: '12px', color: 'var(--text-muted)' } }, formatDate(msg.created_at))
+                  ),
+                  React.createElement('p', { style: { margin: 0, fontSize: '14px' } }, msg.content)
+                );
+              })
+            ),
+            results.posts.length === 0 && results.messages.length === 0 &&
+              React.createElement('div', { style: { textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px' } },
+                React.createElement('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '🔍'),
+                'Keine Ergebnisse für "' + query + '"'
+              )
+          ),
+          !results && !searching && React.createElement('div', { style: { textAlign: 'center', color: 'var(--text-muted)', padding: '60px 20px' } },
+            React.createElement('div', { style: { fontSize: '48px', marginBottom: '12px' } }, '🔍'),
+            'Gib mindestens 2 Zeichen ein um zu suchen'
+          )
+        )
+      );
+    }
 
     function App() {
       const [setupComplete, setSetupComplete] = useState(false);
@@ -1653,23 +1798,29 @@
         }
       };
 
-      const handleNewChat = (targetUser) => {
-        // Check if conversation already exists
-        const existing = conversations.find(c => c.user.id === targetUser.id);
+      const handleNewChat = async (targetUser) => {
+        // Check if conversation already exists in local state
+        const existing = conversations.find(c => c.user?.id === targetUser.id);
         if (existing) {
           setSelectedConversation(existing);
           return;
         }
-        // Create new conversation (demo mode: local only)
-        const newConv = {
-          id: 'new-' + Date.now(),
-          user: targetUser,
-          lastMessage: '',
-          time: 'Jetzt',
-          unread: 0
-        };
-        setConversations(prev => [newConv, ...prev]);
-        setSelectedConversation(newConv);
+        // Erstelle echte Konversation in Supabase (oder finde existierende)
+        const conv = await dataService.createConversation(user.id, targetUser.id);
+        if (conv) {
+          const newConv = {
+            id: conv.id,
+            user: targetUser,
+            lastMessage: '',
+            time: 'Jetzt',
+            unread: 0
+          };
+          setConversations(prev => {
+            if (prev.some(c => c.id === newConv.id)) return prev;
+            return [newConv, ...prev];
+          });
+          setSelectedConversation(newConv);
+        }
       };
 
       const handleLogout = () => {
@@ -1763,6 +1914,7 @@
           React.createElement(ChatPanel, {
             conversation: selectedConversation,
             messages: chatMessages,
+            setMessages: setChatMessages,
             dataService,
             currentUser: user,
             onBack: null
@@ -1786,6 +1938,12 @@
               onClick: () => setView('chat'),
               title: 'Chats',
               dangerouslySetInnerHTML: { __html: Icons.chat }
+            }),
+            React.createElement('button', {
+              className: 'nav-item' + (view === 'search' ? ' active' : ''),
+              onClick: () => setView('search'),
+              title: 'Suche',
+              dangerouslySetInnerHTML: { __html: Icons.search }
             })
           ),
           React.createElement('div', { className: 'sidebar-bottom' },
@@ -1794,7 +1952,7 @@
         ),
         // Main content: Teams oder Chat
         React.createElement('div', { className: 'main' },
-          view === 'teams' ? teamsView : chatView
+          view === 'teams' ? teamsView : view === 'chat' ? chatView : React.createElement(SearchView, { dataService, user })
         ),
         // Thread overlay (nur in Teams-View)
         view === 'teams' && openThread && React.createElement(ThreadPanel, { post: openThread, replies, dataService, user, onClose: () => setOpenThread(null) })
