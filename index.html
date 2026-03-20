@@ -692,6 +692,10 @@
     .conversation-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
     .conversation-time { font-size: 11px; color: var(--text-muted); }
     .unread-badge { background: var(--accent-orange); color: white; border-radius: 10px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
+    .nav-badge { position: absolute; top: 2px; right: 2px; background: var(--accent-orange); color: white; border-radius: 10px; padding: 1px 5px; font-size: 10px; font-weight: 700; min-width: 16px; text-align: center; line-height: 14px; }
+    .nav-item { position: relative; }
+    .channel-unread { font-weight: 700; color: var(--text-primary); }
+    .channel-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-orange); flex-shrink: 0; }
 
     .chat-panel { display: flex; flex-direction: column; height: 100%; }
     .chat-header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
@@ -1522,24 +1526,37 @@
 
     function ConversationList({ conversations, currentUser, selectedId, onSelect, onNewChat, allUsers }) {
       const [showNewChat, setShowNewChat] = useState(false);
+      const [chatSearch, setChatSearch] = useState('');
+
+      const filteredUsers = allUsers
+        .filter(u => u.id !== currentUser.id)
+        .filter(u => !chatSearch || u.display_name.toLowerCase().includes(chatSearch.toLowerCase()));
 
       return React.createElement('div', { className: 'conversation-list' },
         React.createElement('div', { className: 'conversation-header' },
           React.createElement('h2', null, 'Chats'),
           React.createElement('button', {
             className: 'new-chat-btn',
-            onClick: () => setShowNewChat(!showNewChat),
+            onClick: () => { setShowNewChat(!showNewChat); setChatSearch(''); },
             title: 'Neuer Chat',
             dangerouslySetInnerHTML: { __html: showNewChat ? Icons.x : Icons.plus }
           })
         ),
         showNewChat && React.createElement('div', { className: 'new-chat-picker' },
-          allUsers
-            .filter(u => u.id !== currentUser.id)
-            .map(u => React.createElement('button', {
+          React.createElement('input', {
+            type: 'text',
+            placeholder: 'Kolleg:in suchen...',
+            value: chatSearch,
+            onChange: e => setChatSearch(e.target.value),
+            autoFocus: true,
+            style: { width: '100%', padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }
+          }),
+          filteredUsers.length === 0
+            ? React.createElement('div', { style: { padding: '8px', color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center' } }, 'Keine Treffer')
+            : filteredUsers.map(u => React.createElement('button', {
               key: u.id,
               className: 'user-pick-btn',
-              onClick: () => { onNewChat(u); setShowNewChat(false); }
+              onClick: () => { onNewChat(u); setShowNewChat(false); setChatSearch(''); }
             },
               React.createElement(Avatar, { user: u, size: 28 }),
               React.createElement('span', null, u.display_name)
@@ -1790,6 +1807,10 @@
       const [chatMessages, setChatMessages] = useState([]);
       const [allUsers, setAllUsers] = useState([]);
 
+      // Unread notifications
+      const [unreadChatCount, setUnreadChatCount] = useState(0);
+      const [unreadPostChannels, setUnreadPostChannels] = useState(new Set());
+
       const [loadingUsers, setLoadingUsers] = useState(false);
 
       const dataService = useMemo(() => new DataService(isDemo ? null : supabaseClient), [supabaseClient, isDemo]);
@@ -1883,6 +1904,72 @@
         }
       }, [selectedConversation, dataService]);
 
+      // Global listener for new messages (unread badges)
+      useEffect(() => {
+        if (!user || !dataService || dataService.isDemo) return;
+        const sb = dataService.sb;
+        if (!sb) return;
+
+        // Listen for new messages in any conversation the user is part of
+        const msgChannel = sb.channel('global-messages')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+            const newMsg = payload.new;
+            // Don't count own messages or messages in the currently open conversation
+            if (newMsg.sender_id === user.id) return;
+            if (selectedConversation && newMsg.conversation_id === selectedConversation.id) return;
+            // Update unread count
+            setUnreadChatCount(prev => prev + 1);
+            // Update conversation unread badge
+            setConversations(prev => prev.map(c =>
+              c.id === newMsg.conversation_id
+                ? { ...c, unread: (c.unread || 0) + 1, lastMessage: newMsg.content || '📷 Bild', time: 'Jetzt' }
+                : c
+            ));
+          })
+          .subscribe();
+
+        // Listen for new posts (unread in forums)
+        const postChannel = sb.channel('global-posts')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, payload => {
+            const newPost = payload.new;
+            if (newPost.author_id === user.id) return;
+            if (newPost.parent_id) return; // Skip replies
+            // Mark channel as having unread posts
+            setUnreadPostChannels(prev => {
+              const next = new Set(prev);
+              next.add(newPost.channel_id);
+              return next;
+            });
+          })
+          .subscribe();
+
+        return () => {
+          sb.removeChannel(msgChannel);
+          sb.removeChannel(postChannel);
+        };
+      }, [user, dataService, selectedConversation]);
+
+      // Clear unread when opening a conversation
+      const handleConversationSelect = (conv) => {
+        setSelectedConversation(conv);
+        if (conv.unread > 0) {
+          setUnreadChatCount(prev => Math.max(0, prev - conv.unread));
+          setConversations(prev => prev.map(c =>
+            c.id === conv.id ? { ...c, unread: 0 } : c
+          ));
+        }
+      };
+
+      // Clear unread posts when selecting a channel
+      const handleChannelSelect = (ch) => {
+        setSelectedChannel(ch);
+        setUnreadPostChannels(prev => {
+          const next = new Set(prev);
+          next.delete(ch.id);
+          return next;
+        });
+      };
+
       const handleTeamSelect = async (team) => {
         setSelectedTeam(team);
         const channelsData = await dataService.getChannels(team.id);
@@ -1966,16 +2053,18 @@
               React.createElement('h2', null, '# Kanäle')
             ),
             React.createElement('div', { className: 'sidebar-list' },
-              channels.map(ch =>
-                React.createElement('button', {
+              channels.map(ch => {
+                const hasUnread = unreadPostChannels.has(ch.id);
+                return React.createElement('button', {
                   key: ch.id,
                   className: 'list-item' + (selectedChannel?.id === ch.id ? ' active' : ''),
-                  onClick: () => setSelectedChannel(ch)
+                  onClick: () => handleChannelSelect(ch)
                 },
                   React.createElement('span', { style: { fontSize: '12px' } }, '#'),
-                  React.createElement('span', { className: 'list-item-text' }, ch.name),
-                  ch.unread > 0 && React.createElement('span', { className: 'list-item-badge' }, ch.unread)
-                )
+                  React.createElement('span', { className: 'list-item-text' + (hasUnread ? ' channel-unread' : '') }, ch.name),
+                  hasUnread && React.createElement('span', { className: 'channel-dot' })
+                );
+              }
               )
             )
           )
@@ -1999,7 +2088,7 @@
             conversations,
             currentUser: user,
             selectedId: selectedConversation?.id,
-            onSelect: setSelectedConversation,
+            onSelect: handleConversationSelect,
             onNewChat: handleNewChat,
             allUsers
           })
@@ -2024,15 +2113,19 @@
             React.createElement('button', {
               className: 'nav-item' + (view === 'teams' ? ' active' : ''),
               onClick: () => setView('teams'),
-              title: 'Teams & Kanäle',
-              dangerouslySetInnerHTML: { __html: Icons.teams }
-            }),
+              title: 'Teams & Kanäle'
+            },
+              React.createElement('span', { dangerouslySetInnerHTML: { __html: Icons.teams } }),
+              unreadPostChannels.size > 0 && React.createElement('span', { className: 'nav-badge' }, unreadPostChannels.size)
+            ),
             React.createElement('button', {
               className: 'nav-item' + (view === 'chat' ? ' active' : ''),
               onClick: () => setView('chat'),
-              title: 'Chats',
-              dangerouslySetInnerHTML: { __html: Icons.chat }
-            }),
+              title: 'Chats'
+            },
+              React.createElement('span', { dangerouslySetInnerHTML: { __html: Icons.chat } }),
+              unreadChatCount > 0 && React.createElement('span', { className: 'nav-badge' }, unreadChatCount > 9 ? '9+' : unreadChatCount)
+            ),
             React.createElement('button', {
               className: 'nav-item' + (view === 'search' ? ' active' : ''),
               onClick: () => setView('search'),
