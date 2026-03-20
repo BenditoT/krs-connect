@@ -677,7 +677,8 @@
     .new-chat-btn { width: 32px; height: 32px; border-radius: var(--radius); background: var(--accent); color: white; border: none; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all var(--transition); }
     .new-chat-btn:hover { background: var(--accent-hover); }
 
-    .new-chat-picker { padding: 8px 12px; border-bottom: 1px solid var(--border); max-height: 200px; overflow-y: auto; }
+    .new-chat-picker { padding: 8px 12px; border-bottom: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
+    .new-chat-picker input { position: sticky; top: 0; z-index: 1; }
     .user-pick-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: none; background: none; cursor: pointer; border-radius: var(--radius); font-size: 14px; color: var(--text-primary); transition: background var(--transition); }
     .user-pick-btn:hover { background: var(--bg-hover); }
 
@@ -1543,24 +1544,27 @@
           })
         ),
         showNewChat && React.createElement('div', { className: 'new-chat-picker' },
-          React.createElement('input', {
-            type: 'text',
-            placeholder: 'Kolleg:in suchen...',
-            value: chatSearch,
-            onChange: e => setChatSearch(e.target.value),
-            autoFocus: true,
-            style: { width: '100%', padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }
-          }),
-          filteredUsers.length === 0
-            ? React.createElement('div', { style: { padding: '8px', color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center' } }, 'Keine Treffer')
-            : filteredUsers.map(u => React.createElement('button', {
-              key: u.id,
-              className: 'user-pick-btn',
-              onClick: () => { onNewChat(u); setShowNewChat(false); setChatSearch(''); }
-            },
-              React.createElement(Avatar, { user: u, size: 28 }),
-              React.createElement('span', null, u.display_name)
-            ))
+          [
+            React.createElement('input', {
+              key: 'search-input',
+              type: 'text',
+              placeholder: 'Kolleg:in suchen...',
+              value: chatSearch,
+              onChange: e => setChatSearch(e.target.value),
+              autoFocus: true,
+              style: { width: '100%', padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }
+            }),
+            filteredUsers.length === 0
+              ? React.createElement('div', { key: 'no-results', style: { padding: '8px', color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center' } }, 'Keine Treffer')
+              : filteredUsers.map(u => React.createElement('button', {
+                key: u.id,
+                className: 'user-pick-btn',
+                onClick: () => { onNewChat(u); setShowNewChat(false); setChatSearch(''); }
+              },
+                React.createElement(Avatar, { user: u, size: 28 }),
+                React.createElement('span', null, u.display_name)
+              ))
+          ]
         ),
         React.createElement('div', { className: 'conversation-items' },
           conversations.map(conv =>
