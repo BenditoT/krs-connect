@@ -715,6 +715,8 @@
     .chat-send-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: white; border: none; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all var(--transition); flex-shrink: 0; }
     .chat-send-btn:hover { background: var(--accent-hover); }
     .chat-send-btn:disabled { background: var(--text-muted); cursor: not-allowed; }
+    .chat-image-btn svg { width: 22px; height: 22px; }
+    .chat-image-btn:hover { color: var(--accent); }
 
     .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 16px; gap: 12px; }
 
@@ -964,16 +966,38 @@
         }
       }
 
-      async createPost(channelId, authorId, content, title = null) {
+      async uploadImage(file) {
+        if (this.isDemo) {
+          return URL.createObjectURL(file);
+        }
+        try {
+          const ext = file.name.split('.').pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+          const { data, error } = await this.sb.storage.from('images').upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+          if (error) throw error;
+          const { data: urlData } = this.sb.storage.from('images').getPublicUrl(fileName);
+          return urlData.publicUrl;
+        } catch (err) {
+          console.error('uploadImage error:', err);
+          return null;
+        }
+      }
+
+      async createPost(channelId, authorId, content, title = null, imageUrl = null) {
         if (this.isDemo) {
           const author = MOCK_USERS.find(u => u.id === authorId);
-          const post = { id: 'p' + Date.now(), channel_id: channelId, author, content, title, reactions: [], replies: 0, reply_users: [], created_at: new Date().toLocaleString('de-DE') };
+          const post = { id: 'p' + Date.now(), channel_id: channelId, author, content, title, image_url: imageUrl, reactions: [], replies: 0, reply_users: [], created_at: new Date().toLocaleString('de-DE') };
           if (!MOCK_POSTS[channelId]) MOCK_POSTS[channelId] = [];
           MOCK_POSTS[channelId].unshift(post);
           return post;
         }
         try {
-          const { data, error } = await this.sb.from('posts').insert({ channel_id: channelId, author_id: authorId, content, title }).select('*, author:users(*)').single();
+          const insertObj = { channel_id: channelId, author_id: authorId, content, title };
+          if (imageUrl) insertObj.image_url = imageUrl;
+          const { data, error } = await this.sb.from('posts').insert(insertObj).select('*, author:users(*)').single();
           if (error) throw error;
           return data;
         } catch (err) {
@@ -1060,16 +1084,18 @@
         }
       }
 
-      async sendMessage(conversationId, senderId, content) {
+      async sendMessage(conversationId, senderId, content, imageUrl = null) {
         if (this.isDemo) {
           const sender = MOCK_USERS.find(u => u.id === senderId);
-          const msg = { id: 'm' + Date.now(), conversation_id: conversationId, sender, content, created_at: new Date().toLocaleString('de-DE') };
+          const msg = { id: 'm' + Date.now(), conversation_id: conversationId, sender, content, image_url: imageUrl, created_at: new Date().toLocaleString('de-DE') };
           if (!MOCK_MESSAGES[conversationId]) MOCK_MESSAGES[conversationId] = [];
           MOCK_MESSAGES[conversationId].push(msg);
           return msg;
         }
         try {
-          const { data, error } = await this.sb.from('messages').insert({ conversation_id: conversationId, sender_id: senderId, content }).select('*, sender:users(*)').single();
+          const insertObj = { conversation_id: conversationId, sender_id: senderId, content: content || '' };
+          if (imageUrl) insertObj.image_url = imageUrl;
+          const { data, error } = await this.sb.from('messages').insert(insertObj).select('*, sender:users(*)').single();
           if (error) throw error;
           return data;
         } catch (err) {
@@ -1210,6 +1236,7 @@
       logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
       x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
       search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+      image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
     };
 
     // ============================================================
@@ -1348,19 +1375,42 @@
       const [newPostContent, setNewPostContent] = useState('');
       const [saving, setSaving] = useState(false);
       const [postError, setPostError] = useState('');
+      const [selectedImage, setSelectedImage] = useState(null);
+      const [imagePreview, setImagePreview] = useState(null);
+      const fileInputRef = useRef(null);
+
+      const handleImageSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          if (file.size > 5 * 1024 * 1024) { setPostError('Bild zu groß (max. 5 MB)'); return; }
+          setSelectedImage(file);
+          setImagePreview(URL.createObjectURL(file));
+        }
+      };
+
+      const removeImage = () => {
+        setSelectedImage(null);
+        setImagePreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      };
 
       const handleCreatePost = async (e) => {
         e.preventDefault();
-        if (!newPostContent.trim()) return;
+        if (!newPostContent.trim() && !selectedImage) return;
         setSaving(true);
         setPostError('');
         try {
-          const newPost = await dataService.createPost(channelId, user.id, newPostContent, newPostTitle || undefined);
+          let imageUrl = null;
+          if (selectedImage) {
+            imageUrl = await dataService.uploadImage(selectedImage);
+            if (!imageUrl) { setPostError('Bild konnte nicht hochgeladen werden.'); setSaving(false); return; }
+          }
+          const newPost = await dataService.createPost(channelId, user.id, newPostContent || '📷 Bild', newPostTitle || undefined, imageUrl);
           if (newPost) {
-            // Sofort in die Liste einfügen (optimistic update)
             setPosts(prev => [newPost, ...prev]);
             setNewPostTitle('');
             setNewPostContent('');
+            removeImage();
           } else {
             setPostError('Post konnte nicht erstellt werden.');
           }
@@ -1374,7 +1424,15 @@
         React.createElement('form', { onSubmit: handleCreatePost, style: { marginBottom: '20px' } },
           React.createElement('input', { type: 'text', placeholder: 'Titel (optional)', value: newPostTitle, onChange: e => setNewPostTitle(e.target.value), style: { display: 'block', width: '100%', padding: '10px', marginBottom: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px' } }),
           React.createElement('textarea', { placeholder: 'Nachricht schreiben...', value: newPostContent, onChange: e => setNewPostContent(e.target.value), style: { display: 'block', width: '100%', padding: '10px', marginBottom: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px', minHeight: '80px', fontFamily: 'inherit', fontWeight: 'inherit' } }),
-          React.createElement('button', { type: 'submit', disabled: saving, style: { padding: '8px 16px', background: saving ? 'var(--text-muted)' : 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius)', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '14px' } }, saving ? 'Wird gesendet...' : 'Posten')
+          imagePreview && React.createElement('div', { style: { position: 'relative', display: 'inline-block', marginBottom: '10px' } },
+            React.createElement('img', { src: imagePreview, style: { maxWidth: '200px', maxHeight: '150px', borderRadius: 'var(--radius)', border: '1px solid var(--border)' } }),
+            React.createElement('button', { type: 'button', onClick: removeImage, style: { position: 'absolute', top: '-8px', right: '-8px', width: '24px', height: '24px', borderRadius: '50%', background: 'var(--danger)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: '24px', textAlign: 'center', padding: 0 } }, '✕')
+          ),
+          React.createElement('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+            React.createElement('input', { ref: fileInputRef, type: 'file', accept: 'image/*', onChange: handleImageSelect, style: { display: 'none' } }),
+            React.createElement('button', { type: 'button', onClick: () => fileInputRef.current?.click(), title: 'Bild anhängen', style: { padding: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }, dangerouslySetInnerHTML: { __html: Icons.image } }),
+            React.createElement('button', { type: 'submit', disabled: saving, style: { padding: '8px 16px', background: saving ? 'var(--text-muted)' : 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius)', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '14px' } }, saving ? 'Wird gesendet...' : 'Posten')
+          )
         ),
         postError && React.createElement('p', { style: { color: 'var(--danger)', fontSize: '13px', margin: '0 0 12px' } }, postError),
         posts.map(post => {
@@ -1391,6 +1449,9 @@
             post.title && React.createElement('div', { className: 'post-title' }, post.title),
             React.createElement('div', { className: 'post-content' },
               React.createElement('p', null, post.content)
+            ),
+            post.image_url && React.createElement('div', { className: 'post-image', style: { margin: '8px 0' } },
+              React.createElement('img', { src: post.image_url, style: { maxWidth: '100%', maxHeight: '400px', borderRadius: 'var(--radius)', cursor: 'pointer' }, onClick: () => window.open(post.image_url, '_blank') })
             ),
             post.reactions && post.reactions.length > 0 && React.createElement('div', { className: 'post-reactions' },
               post.reactions.map(r =>
@@ -1510,7 +1571,10 @@
     function ChatPanel({ conversation, messages, setMessages, dataService, currentUser, onBack }) {
       const [input, setInput] = useState('');
       const [sending, setSending] = useState(false);
+      const [chatImage, setChatImage] = useState(null);
+      const [chatImagePreview, setChatImagePreview] = useState(null);
       const messagesEndRef = useRef(null);
+      const chatFileRef = useRef(null);
 
       useEffect(() => {
         if (messagesEndRef.current) {
@@ -1518,12 +1582,31 @@
         }
       }, [messages]);
 
+      const handleChatImageSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          if (file.size > 5 * 1024 * 1024) { alert('Bild zu groß (max. 5 MB)'); return; }
+          setChatImage(file);
+          setChatImagePreview(URL.createObjectURL(file));
+        }
+      };
+
+      const removeChatImage = () => {
+        setChatImage(null);
+        setChatImagePreview(null);
+        if (chatFileRef.current) chatFileRef.current.value = '';
+      };
+
       const handleSend = async (e) => {
         e.preventDefault();
-        if (!input.trim() || sending) return;
+        if ((!input.trim() && !chatImage) || sending) return;
         setSending(true);
         try {
-          const sentMsg = await dataService.sendMessage(conversation.id, currentUser.id, input);
+          let imageUrl = null;
+          if (chatImage) {
+            imageUrl = await dataService.uploadImage(chatImage);
+          }
+          const sentMsg = await dataService.sendMessage(conversation.id, currentUser.id, input || (imageUrl ? '📷 Bild' : ''), imageUrl);
           if (sentMsg && setMessages) {
             setMessages(prev => {
               if (prev.some(m => m.id === sentMsg.id)) return prev;
@@ -1531,6 +1614,7 @@
             });
           }
           setInput('');
+          removeChatImage();
         } catch (err) {
           console.error('Send failed:', err);
         }
@@ -1563,7 +1647,9 @@
             },
               !isOwn(msg) && React.createElement(Avatar, { user: msg.sender, size: 28 }),
               React.createElement('div', { className: 'chat-bubble ' + (isOwn(msg) ? 'own' : 'other') },
-                React.createElement('div', { className: 'chat-text' }, msg.content),
+                msg.image_url && React.createElement('img', { src: msg.image_url, style: { maxWidth: '240px', maxHeight: '200px', borderRadius: '8px', marginBottom: '4px', cursor: 'pointer', display: 'block' }, onClick: () => window.open(msg.image_url, '_blank') }),
+                msg.content && msg.content !== '📷 Bild' && React.createElement('div', { className: 'chat-text' }, msg.content),
+                !msg.content && !msg.image_url && React.createElement('div', { className: 'chat-text' }, msg.content),
                 React.createElement('div', { className: 'chat-time' }, formatDate(msg.created_at))
               )
             )
@@ -1573,7 +1659,15 @@
           ),
           React.createElement('div', { ref: messagesEndRef })
         ),
+        chatImagePreview && React.createElement('div', { style: { padding: '8px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)' } },
+          React.createElement('div', { style: { position: 'relative', display: 'inline-block' } },
+            React.createElement('img', { src: chatImagePreview, style: { maxWidth: '120px', maxHeight: '80px', borderRadius: '8px' } }),
+            React.createElement('button', { type: 'button', onClick: removeChatImage, style: { position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%', background: 'var(--danger)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px', lineHeight: '20px', textAlign: 'center', padding: 0 } }, '✕')
+          )
+        ),
         React.createElement('form', { className: 'chat-input-bar', onSubmit: handleSend },
+          React.createElement('input', { ref: chatFileRef, type: 'file', accept: 'image/*', onChange: handleChatImageSelect, style: { display: 'none' } }),
+          React.createElement('button', { type: 'button', onClick: () => chatFileRef.current?.click(), title: 'Bild senden', className: 'chat-image-btn', style: { background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }, dangerouslySetInnerHTML: { __html: Icons.image } }),
           React.createElement('input', {
             type: 'text',
             placeholder: 'Nachricht schreiben...',
@@ -1584,7 +1678,7 @@
           React.createElement('button', {
             type: 'submit',
             className: 'chat-send-btn',
-            disabled: sending || !input.trim(),
+            disabled: sending || (!input.trim() && !chatImage),
             dangerouslySetInnerHTML: { __html: Icons.send }
           })
         )
