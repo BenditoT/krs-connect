@@ -1247,6 +1247,7 @@
             Object.keys(state).forEach(key => {
               onlineIds.add(key);
             });
+            console.log('Presence sync:', JSON.stringify({ keys: Object.keys(state), stateDetail: state }));
             onPresenceChange(onlineIds);
           })
           .subscribe(async (status) => {
@@ -2016,7 +2017,9 @@
       // Presence tracking — show who is online
       useEffect(() => {
         if (!user || !dataService || dataService.isDemo) return;
+        console.log('Starting presence tracking for user:', user.id, typeof user.id);
         const cleanup = dataService.trackPresence(user.id, user.display_name, (onlineIds) => {
+          console.log('Online IDs:', [...onlineIds], 'allUsers IDs sample:', allUsers.slice(0,2).map(u => ({id: u.id, type: typeof u.id})));
           setOnlineUsers(onlineIds);
         });
         return cleanup;
