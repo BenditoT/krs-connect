@@ -1243,15 +1243,15 @@
         presenceChannel
           .on('presence', { event: 'sync' }, () => {
             const state = presenceChannel.presenceState();
-            const onlineMap = new Map();
+            const onlineIds = new Set();
             Object.values(state).forEach(presences => {
               presences.forEach(p => {
                 if (p.user_id != null) {
-                  onlineMap.set(Number(p.user_id), p);
+                  onlineIds.add(Number(p.user_id));
                 }
               });
             });
-            onPresenceChange(onlineMap);
+            onPresenceChange(onlineIds);
           })
           .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
@@ -1876,7 +1876,7 @@
       const [unreadPostChannels, setUnreadPostChannels] = useState(new Set());
 
       // Online presence
-      const [onlineUsers, setOnlineUsers] = useState(new Map());
+      const [onlineUsers, setOnlineUsers] = useState(new Set());
       const [showOnlinePanel, setShowOnlinePanel] = useState(false);
 
       const [loadingUsers, setLoadingUsers] = useState(false);
@@ -2094,7 +2094,7 @@
         setConversations([]);
         setSelectedConversation(null);
         setChatMessages([]);
-        setOnlineUsers(new Map());
+        setOnlineUsers(new Set());
         setShowOnlinePanel(false);
       };
 
