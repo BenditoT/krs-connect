@@ -1015,13 +1015,33 @@
       async getConversations(userId) {
         if (this.isDemo) return [...MOCK_CONVERSATIONS];
         try {
+          // 1. Finde alle Konversationen des Users
           const { data: memberships, error: err1 } = await this.sb.from('conversation_members').select('conversation_id').eq('user_id', userId);
           if (err1) throw err1;
           if (!memberships?.length) return [];
           const convIds = memberships.map(m => m.conversation_id);
-          const { data, error } = await this.sb.from('conversations').select('*').in('id', convIds);
+          const { data: convs, error } = await this.sb.from('conversations').select('*').in('id', convIds);
           if (error) throw error;
-          return data || [];
+          if (!convs?.length) return [];
+
+          // 2. Lade alle Teilnehmer dieser Konversationen
+          const { data: allMembers } = await this.sb.from('conversation_members').select('conversation_id, user_id, users(*)').in('conversation_id', convIds);
+
+          // 3. Lade letzte Nachricht pro Konversation
+          const { data: lastMsgs } = await this.sb.from('messages').select('conversation_id, content, created_at').in('conversation_id', convIds).order('created_at', { ascending: false });
+
+          // 4. Reichere Konversationen an
+          return convs.map(conv => {
+            const members = (allMembers || []).filter(m => m.conversation_id === conv.id);
+            const otherMember = members.find(m => m.user_id !== userId);
+            const lastMsg = (lastMsgs || []).find(m => m.conversation_id === conv.id);
+            return {
+              ...conv,
+              user: otherMember?.users || { display_name: 'Unbekannt', avatar_color: '#999' },
+              lastMessage: lastMsg?.content || '',
+              time: lastMsg ? formatDate(lastMsg.created_at) : ''
+            };
+          });
         } catch (err) {
           console.error('getConversations error:', err);
           return [];
@@ -1413,10 +1433,10 @@
               className: 'conversation-item' + (selectedId === conv.id ? ' active' : ''),
               onClick: () => onSelect(conv)
             },
-              React.createElement(Avatar, { user: conv.user, size: 40 }),
+              React.createElement(Avatar, { user: conv.user || { display_name: '?', avatar_color: '#999' }, size: 40 }),
               React.createElement('div', { className: 'conversation-info' },
-                React.createElement('div', { className: 'conversation-name' }, conv.user.display_name),
-                React.createElement('div', { className: 'conversation-preview' }, conv.lastMessage)
+                React.createElement('div', { className: 'conversation-name' }, (conv.user || {}).display_name || 'Unbekannt'),
+                React.createElement('div', { className: 'conversation-preview' }, conv.lastMessage || '')
               ),
               React.createElement('div', { className: 'conversation-meta' },
                 React.createElement('span', { className: 'conversation-time' }, conv.time),
