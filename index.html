@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KRS Connect</title>
+  <style>
+    :root {
+      --bg-primary: #F8F9FC;
+      --bg-secondary: #FFFFFF;
+      --bg-tertiary: #EEF0F4;
+      --bg-hover: #E4E7ED;
+      --bg-active: #D8DCE5;
+      --text-primary: #1A1D26;
+      --text-secondary: #5A5F72;
+      --text-muted: #8C91A0;
+      --accent: #5B7B94;
+      --accent-hover: #4A6A83;
+      --accent-light: rgba(91,123,148,0.1);
+      --accent-orange: #D4762C;
+      --accent-amber: #E8A832;
+      --success: #22C55E;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --border: #E2E4E8;
+      --shadow: rgba(0,0,0,0.06);
+      --radius: 8px;
+      --radius-lg: 12px;
+      --transition: 0.15s ease;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow: hidden;
+    }
+
+    #app { width: 100%; height: 100vh; }
+
+    /* Layout */
+    .app-layout {
+      display: flex;
+      height: 100vh;
+      width: 100%;
+      background: var(--bg-primary);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 68px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      gap: 24px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 100;
+    }
+
+    .sidebar-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all var(--transition);
+      padding: 3px;
+    }
+
+    .sidebar-logo:hover { background: var(--bg-tertiary); }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .nav-item {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition);
+    }
+
+    .nav-item svg { width: 20px; height: 20px; }
+    .nav-item:hover { color: var(--accent); background: var(--bg-hover); }
+    .nav-item.active { color: var(--accent); background: var(--accent-light); }
+
+    .sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+    }
+
+    /* Main Content */
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .sidebar-content {
+      width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-header h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .sidebar-search {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { outline: none; border-color: var(--accent); }
+
+    .sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 12px;
+    }
+
+    .list-item {
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      border-radius: var(--radius);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--text-primary);
+      text-align: left;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .list-item:hover { background: var(--bg-hover); }
+    .list-item.active { background: var(--accent-light); color: var(--accent); font-weight: 500; }
+    .list-item-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .list-item-text { flex: 1; font-size: 13px; }
+    .list-item-badge { font-size: 11px; background: var(--danger); color: white; padding: 2px 6px; border-radius: 10px; }
+
+    /* Content Area */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .content-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-secondary);
+    }
+
+    .content-header h1 { margin: 0; font-size: 18px; }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition);
+    }
+
+    .icon-btn svg { width: 18px; height: 18px; }
+    .icon-btn:hover { background: var(--bg-hover); color: var(--accent); }
+
+    .content-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      box-shadow: 0 1px 3px var(--shadow);
+      transition: all var(--transition);
+    }
+
+    .card:hover { box-shadow: 0 4px 12px var(--shadow); }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .card-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Posts */
+    .post {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      box-shadow: 0 1px 3px var(--shadow);
+      transition: all var(--transition);
+    }
+
+    .post:hover { box-shadow: 0 4px 12px var(--shadow); }
+
+    .post-header {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .post-author {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .post-time {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .post-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 8px 0;
+      cursor: pointer;
+    }
+
+    .post-content {
+      font-size: 14px;
+      color: var(--text-primary);
+      line-height: 1.5;
+      margin: 8px 0;
+    }
+
+    .post-content p { margin: 8px 0; }
+    .post-content ul { margin: 8px 0; padding-left: 20px; }
+    .post-content li { margin: 4px 0; }
+    .post-content strong { font-weight: 600; }
+
+    .post-reactions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 12px 0;
+    }
+
+    .reaction {
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 4px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .reaction:hover { background: var(--accent-light); border-color: var(--accent); }
+
+    .post-footer {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .post-footer button {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 0;
+      transition: color var(--transition);
+    }
+
+    .post-footer button:hover { color: var(--accent); }
+
+    /* Thread */
+    .thread-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .thread-panel {
+      width: 100%;
+      max-width: 500px;
+      height: 100%;
+      background: var(--bg-secondary);
+      display: flex;
+      flex-direction: column;
+      margin-left: auto;
+      border-left: 1px solid var(--border);
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+    .thread-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .thread-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .thread-reply {
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-lg);
+      padding: 12px;
+    }
+
+    .thread-reply-author {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .thread-reply-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .thread-reply-content {
+      font-size: 13px;
+      color: var(--text-primary);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .thread-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+
+    .compose-box {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .compose-input {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 13px;
+      resize: none;
+      max-height: 100px;
+      font-family: inherit;
+    }
+
+    .compose-input:focus { outline: none; border-color: var(--accent); }
+
+    .compose-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      border: none;
+      background: var(--accent);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition);
+      flex-shrink: 0;
+    }
+
+    .compose-btn:hover { background: var(--accent-hover); }
+    .compose-btn:disabled { background: var(--text-muted); cursor: not-allowed; }
+
+    /* Avatar */
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    /* Emoji Picker */
+    .emoji-picker-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 500;
+    }
+
+    .emoji-picker {
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 10px 40px var(--shadow);
+      width: 340px;
+      max-height: 400px;
+      display: flex;
+      flex-direction: column;
+      z-index: 501;
+    }
+
+    .emoji-picker-header {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .emoji-picker-header input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+
+    .emoji-picker-header input:focus { outline: none; border-color: var(--accent); }
+
+    .emoji-grid {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 4px;
+    }
+
+    .emoji-category {
+      grid-column: 1 / -1;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-top: 4px;
+      padding: 4px 8px;
+    }
+
+    .emoji-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: var(--radius);
+      transition: all var(--transition);
+    }
+
+    .emoji-btn:hover { background: var(--bg-hover); }
+
+    /* Toast */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 2000;
+    }
+
+    .toast {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      box-shadow: 0 4px 12px var(--shadow);
+      animation: toastSlideIn 0.3s ease;
+    }
+
+    @keyframes toastSlideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    .toast.leaving { animation: toastSlideOut 0.3s ease forwards; }
+    @keyframes toastSlideOut { to { transform: translateX(400px); opacity: 0; } }
+
+    .toast > div { flex: 1; }
+    .toast strong { color: var(--text-primary); }
+
+    /* Setup/Selection Screens */
+    .setup-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .setup-screen h1 {
+      font-size: 32px;
+      margin-bottom: 30px;
+    }
+
+    .setup-screen input {
+      display: block;
+      width: 300px;
+      margin: 10px auto;
+      padding: 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .setup-screen input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .setup-screen button {
+      padding: 10px 30px;
+      margin-top: 20px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 14px;
+      transition: all var(--transition);
+    }
+
+    .setup-screen button:hover {
+      background: var(--accent-hover);
+    }
+
+    .setup-screen label {
+      display: block;
+      margin: 15px 0;
+      font-size: 16px;
+    }
+
+    .user-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 16px;
+      max-width: 600px;
+      margin: 30px auto 0;
+    }
+
+    .user-btn {
+      padding: 20px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: white;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .user-btn:hover {
+      box-shadow: 0 4px 12px var(--shadow);
+      transform: translateY(-2px);
+    }
+
+    .user-btn-name {
+      margin-top: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    /* Chat UI */
+    .conversation-list { display: flex; flex-direction: column; height: 100%; }
+    .conversation-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .conversation-header h2 { margin: 0; font-size: 16px; }
+    .new-chat-btn { width: 32px; height: 32px; border-radius: var(--radius); background: var(--accent); color: white; border: none; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all var(--transition); }
+    .new-chat-btn:hover { background: var(--accent-hover); }
+
+    .new-chat-picker { padding: 8px 12px; border-bottom: 1px solid var(--border); max-height: 200px; overflow-y: auto; }
+    .user-pick-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: none; background: none; cursor: pointer; border-radius: var(--radius); font-size: 14px; color: var(--text-primary); transition: background var(--transition); }
+    .user-pick-btn:hover { background: var(--bg-hover); }
+
+    .conversation-items { flex: 1; overflow-y: auto; }
+
+    .conversation-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 16px; border: none; background: none; cursor: pointer; text-align: left; transition: background var(--transition); border-bottom: 1px solid var(--border); }
+    .conversation-item:hover { background: var(--bg-hover); }
+    .conversation-item.active { background: var(--accent-light); }
+    .conversation-info { flex: 1; min-width: 0; }
+    .conversation-name { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+    .conversation-preview { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .conversation-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+    .conversation-time { font-size: 11px; color: var(--text-muted); }
+    .unread-badge { background: var(--accent-orange); color: white; border-radius: 10px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
+
+    .chat-panel { display: flex; flex-direction: column; height: 100%; }
+    .chat-header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .chat-header-name { font-weight: 600; font-size: 16px; }
+    .back-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-secondary); padding: 4px; }
+
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; }
+    .chat-msg { display: flex; gap: 8px; max-width: 75%; }
+    .chat-msg.own { align-self: flex-end; flex-direction: row-reverse; }
+    .chat-msg.other { align-self: flex-start; }
+    .chat-bubble { padding: 10px 14px; border-radius: 16px; background: var(--bg-tertiary); word-break: break-word; }
+    .chat-bubble.own { background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+    .chat-bubble.other { border-bottom-left-radius: 4px; }
+    .chat-text { font-size: 14px; line-height: 1.5; }
+    .chat-time { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .chat-bubble.own .chat-time { color: rgba(255,255,255,0.7); }
+
+    .chat-input-bar { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); align-items: flex-end; }
+    .chat-input-bar input { flex: 1; padding: 10px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); font-size: 14px; }
+    .chat-input-bar input:focus { outline: none; border-color: var(--accent); }
+    .chat-send-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: white; border: none; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all var(--transition); flex-shrink: 0; }
+    .chat-send-btn:hover { background: var(--accent-hover); }
+    .chat-send-btn:disabled { background: var(--text-muted); cursor: not-allowed; }
+
+    .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 16px; gap: 12px; }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar-content { width: 100%; }
+      .content { display: none; }
+      .app-layout { flex-direction: column; }
+      .sidebar { width: 100%; height: 60px; flex-direction: row; padding: 0 16px; gap: 16px; }
+      .sidebar-nav { flex-direction: row; flex: 1; }
+      .sidebar-bottom { flex-direction: row; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <script type="module">
+    // ============================================================
+    // MOCK DATA (KRS-specific)
+    // ============================================================
+    const MOCK_USERS = [
+      { id: 1, username: 'nkotzan', display_name: 'Norbert Kotzan', avatar_color: '#7c6ff7', role: 'admin' },
+      { id: 2, username: 'dschmitt', display_name: 'Daniel Schmitt', avatar_color: '#f59e0b', role: 'admin' },
+      { id: 3, username: 'pcarse', display_name: 'Petra Carse', avatar_color: '#ec4899', role: 'admin' },
+      { id: 4, username: 'mmueller', display_name: 'Maria Müller', avatar_color: '#10b981', role: 'member' },
+      { id: 5, username: 'tweber', display_name: 'Thomas Weber', avatar_color: '#3b82f6', role: 'member' },
+      { id: 6, username: 'sfischer', display_name: 'Sandra Fischer', avatar_color: '#ef4444', role: 'member' },
+      { id: 7, username: 'jbecker', display_name: 'Julia Becker', avatar_color: '#8b5cf6', role: 'member' },
+      { id: 8, username: 'rschulz', display_name: 'Robert Schulz', avatar_color: '#06b6d4', role: 'member' },
+    ];
+
+    const MOCK_TEAMS = [
+      { id: 1, name: 'Kollegium', icon_text: 'KRS', icon_color: '#7c6ff7', category: 'Teams', description: 'Gesamtes Kollegium', members: 35 },
+      { id: 2, name: 'Musik Fachschaft', icon_text: '♪', icon_color: '#ec4899', category: 'Teams', description: 'Fachschaft Musik', members: 4 },
+      { id: 3, name: 'Informatik Fachschaft', icon_text: '</>', icon_color: '#3b82f6', category: 'Teams', description: 'Fachschaft Informatik', members: 3 },
+      { id: 4, name: 'Religion Fachschaft', icon_text: 'RF', icon_color: '#f97316', category: 'Teams', description: 'Fachschaft Religion', members: 5 },
+      { id: 5, name: 'Deutsch Fachschaft', icon_text: 'DF', icon_color: '#ef4444', category: 'Teams', description: 'Fachschaft Deutsch', members: 6 },
+      { id: 6, name: '7b / Lehrer:innen / 25-26', icon_text: '7B', icon_color: '#f59e0b', category: 'Kurse', description: 'Klassenteam 7b', members: 8 },
+      { id: 7, name: '8a / Lehrer:innen / 25-26', icon_text: '8L', icon_color: '#10b981', category: 'Kurse', description: 'Klassenteam 8a', members: 7 },
+      { id: 8, name: '9c / Lehrer:innen / 25-26', icon_text: '9C', icon_color: '#8b5cf6', category: 'Kurse', description: 'Klassenteam 9c', members: 9 },
+      { id: 9, name: '6c / Lehrer:innen / 25-26', icon_text: '5L', icon_color: '#a855f7', category: 'Kurse', description: 'Klassenteam 6c', members: 8 },
+      { id: 10, name: 'Gourmetküche', icon_text: 'G', icon_color: '#ef4444', category: 'Kurse', description: 'AG Kochen', members: 3 },
+    ];
+
+    const MOCK_CHANNELS = {
+      1: [
+        { id: 1, name: 'Allgemein', is_default: true, unread: 0 },
+        { id: 2, name: 'FAQ und Infos', unread: 3 },
+        { id: 3, name: 'Austausch Digitales', unread: 0 },
+        { id: 4, name: 'Kollegialer Austausch', unread: 1 },
+        { id: 5, name: 'NEO Zeugnis', unread: 0 },
+        { id: 6, name: 'Schulsozialarbeit informiert', unread: 0 },
+        { id: 7, name: 'SMV', unread: 2 },
+      ],
+      2: [
+        { id: 10, name: 'Allgemein', is_default: true, unread: 0 },
+        { id: 11, name: 'Schulband', unread: 1 },
+        { id: 12, name: 'Konzerte', unread: 0 },
+      ],
+      3: [
+        { id: 20, name: 'Allgemein', is_default: true, unread: 0 },
+        { id: 21, name: 'iPad-Verwaltung', unread: 2 },
+        { id: 22, name: 'iServ', unread: 0 },
+      ],
+    };
+
+    let MOCK_POSTS = {
+      2: [
+        {
+          id: 1, author: MOCK_USERS[1], title: 'FAQ und Infos Schulwoche 12',
+          content: '<p>Liebe Kolleginnen und Kollegen,</p><p><strong>1. Sperrung Schwimmbad:</strong></p><ul><li>Am Freitag den 21.03.2026 findet kein Schwimmunterricht statt</li><li>Grund: Wartungsarbeiten am Filtersystem</li></ul><p><strong>2. Elternsprechtag:</strong></p><ul><li>Donnerstag, 26.03.2026, 16:00–19:00 Uhr</li><li>Bitte Terminlisten bis Mittwoch eintragen</li></ul><p><strong>3. Fortbildung Medienkompetenz:</strong></p><ul><li>Anmeldung bis 28.03. bei Norbert Kotzan</li><li>Thema: KI im Unterricht — Chancen und Grenzen</li></ul>',
+          reactions: [{ emoji: '👍', users: [1, 4, 5], count: 3 }, { emoji: '📝', users: [3], count: 1 }],
+          replies: 4, reply_users: [MOCK_USERS[0], MOCK_USERS[3], MOCK_USERS[6]],
+          created_at: '20.03.2026, 08:15'
+        },
+        {
+          id: 2, author: MOCK_USERS[1], title: 'FAQ und Infos Schulwoche 11',
+          content: '<p>Liebe Kolleginnen und Kollegen,</p><p><strong>1. Projektwoche Planung:</strong></p><ul><li>Bitte Projektvorschläge bis Freitag 14.03. einreichen</li><li>Formular liegt im Lehrerzimmer aus oder digital über iServ</li></ul><p><strong>2. Neue iPads eingetroffen:</strong></p><ul><li>15 neue iPads für den Informatik-Raum</li><li>Einrichtung erfolgt durch Norbert — bitte Geduld</li></ul>',
+          reactions: [{ emoji: '👍', users: [1, 3, 7], count: 3 }],
+          replies: 2, reply_users: [MOCK_USERS[0], MOCK_USERS[4]],
+          created_at: '14.03.2026, 07:55'
+        },
+      ],
+      1: [
+        {
+          id: 3, author: MOCK_USERS[2], title: '',
+          content: '<p>Liebe Kolleginnen und Kollegen, bitte denkt daran, die Klassenbücher bis Ende der Woche zu aktualisieren. Danke!</p>',
+          reactions: [{ emoji: '✅', users: [1, 2, 4, 5, 6], count: 5 }],
+          replies: 0, reply_users: [],
+          created_at: '19.03.2026, 14:30'
+        },
+        {
+          id: 4, author: MOCK_USERS[0], title: 'Schulband — Auftritt beim Schulfest',
+          content: '<p>Hallo zusammen!</p><p>Die Schulband tritt am <strong>Schulfest (04.04.2026)</strong> auf. Wir spielen um 15:00 Uhr auf dem Schulhof.</p><p>Wer Lust hat zu helfen (Aufbau ab 13:00), bitte bei mir melden. Wir brauchen vor allem Hilfe beim Soundcheck.</p>',
+          reactions: [{ emoji: '🎵', users: [2, 3, 7], count: 3 }, { emoji: '💪', users: [4, 5], count: 2 }],
+          replies: 6, reply_users: [MOCK_USERS[1], MOCK_USERS[3], MOCK_USERS[5], MOCK_USERS[7]],
+          created_at: '18.03.2026, 11:20'
+        },
+      ],
+      7: [
+        {
+          id: 5, author: MOCK_USERS[0], title: 'SMV-Treffen nächste Woche',
+          content: '<p>Das nächste SMV-Treffen findet am <strong>Mittwoch, 25.03.</strong> in der 7. Stunde statt.</p><p>Themen:</p><ul><li>Planung Schulfest</li><li>Wünsche der Schüler:innen (Ergebnisse der Umfrage)</li><li>Budget-Übersicht</li></ul>',
+          reactions: [{ emoji: '👍', users: [2, 3], count: 2 }],
+          replies: 1, reply_users: [MOCK_USERS[1]],
+          created_at: '19.03.2026, 09:00'
+        },
+      ]
+    };
+
+    let MOCK_REPLIES = {
+      1: [
+        { id: 101, author: MOCK_USERS[0], content: 'Danke Daniel! Wegen der Fortbildung: Ist das ganztägig oder nur nachmittags?', created_at: '20.03.2026, 08:45' },
+        { id: 102, author: MOCK_USERS[1], content: 'Nachmittags, 14:00–17:00 Uhr. Vertretung für die 5./6. Stunde muss organisiert werden.', created_at: '20.03.2026, 09:12' },
+        { id: 103, author: MOCK_USERS[3], content: 'Kann ich mich auch noch anmelden? Klingt spannend!', created_at: '20.03.2026, 10:30' },
+        { id: 104, author: MOCK_USERS[6], content: 'Ich hätte auch Interesse. Gibt es noch Plätze?', created_at: '20.03.2026, 11:05' },
+      ],
+      4: [
+        { id: 201, author: MOCK_USERS[1], content: 'Super Sache! Ich helfe gerne beim Aufbau.', created_at: '18.03.2026, 12:00' },
+        { id: 202, author: MOCK_USERS[3], content: 'Ich kann ab 13:30 da sein. Reicht das?', created_at: '18.03.2026, 13:15' },
+        { id: 203, author: MOCK_USERS[0], content: 'Klar Maria, das passt! Danke euch beiden!', created_at: '18.03.2026, 13:30' },
+      ]
+    };
+
+    let MOCK_MESSAGES = {
+      1: [
+        { id: 1, sender: MOCK_USERS[1], content: 'Hey Norbert, kurze Frage:', created_at: '17:25' },
+        { id: 2, sender: MOCK_USERS[1], content: 'Kannst du morgen die Vertretung für die 3. Stunde übernehmen? Frau Fischer ist krank.', created_at: '17:25' },
+        { id: 3, sender: MOCK_USERS[1], content: 'Wäre Klasse 8a, Musik', created_at: '17:30' },
+      ],
+      2: [
+        { id: 10, sender: MOCK_USERS[0], content: 'Die neuen iPads sind da! 15 Stück für den Informatikraum.', created_at: '14:50' },
+        { id: 11, sender: MOCK_USERS[2], content: 'Super! Wann können die Kolleg:innen die nutzen?', created_at: '15:05' },
+        { id: 12, sender: MOCK_USERS[0], content: 'Ich richte sie diese Woche ein. Ab Montag sollten sie einsatzbereit sein.', created_at: '15:10' },
+        { id: 13, sender: MOCK_USERS[2], content: 'Danke für die Info wegen der iPads!', created_at: '15:20' },
+      ],
+    };
+
+    const MOCK_CONVERSATIONS = [
+      { id: 1, user: MOCK_USERS[1], lastMessage: 'Kannst du morgen die Vertretung für die 3. Stunde übernehmen?', time: '17:30', unread: 1 },
+      { id: 2, user: MOCK_USERS[2], lastMessage: 'Danke für die Info wegen der iPads!', time: '15:20', unread: 0 },
+      { id: 3, user: MOCK_USERS[3], lastMessage: 'Hast du das Arbeitsblatt für Klasse 7b?', time: 'Gestern', unread: 0 },
+      { id: 4, user: MOCK_USERS[5], lastMessage: 'Die Noten sind eingetragen 👍', time: 'Gestern', unread: 0 },
+      { id: 5, user: MOCK_USERS[7], lastMessage: 'Treffen wir uns in der Pause?', time: 'Mo', unread: 0 },
+    ];
+
+    const EMOJI_NAMES = {
+      '👍':'daumen hoch thumbs up','❤️':'herz heart liebe','😂':'lachen laugh tränen','🎉':'party feier tada',
+      '👏':'klatschen applaus clap','🔥':'feuer fire hot','✅':'check haken done erledigt','💪':'stark strong muscle',
+      '🙏':'bitte danke pray thanks','😊':'lächeln smile freundlich','👀':'augen eyes schauen','💡':'idee idea lampe',
+      '📝':'notiz note schreiben','🎵':'musik music note','⭐':'stern star','😀':'grinsen grin happy',
+      '😃':'lachen smile happy','😄':'freude joy','😁':'grinsen beam','😅':'schweiß sweat',
+      '🤣':'totlachen rofl','😇':'engel angel','🙂':'leicht lächeln slight smile','😉':'zwinkern wink',
+      '😌':'erleichtert relieved','😍':'herzaugen love eyes','🥰':'verliebt love hearts',
+      '😘':'kuss kiss','😗':'kuss kiss','😙':'kuss kiss','😚':'kuss kiss','😋':'lecker yummy',
+      '😛':'zunge tongue','😜':'zunge zwinkern wink tongue','🤪':'verrückt crazy zany',
+      '😝':'zunge tongue','🤗':'umarmung hug','🤭':'kichern giggle','🤫':'psst shh leise quiet',
+      '🤔':'denken think hmm','🤐':'mund zu zipper','🤨':'skeptisch raised brow','😐':'neutral',
+      '😑':'ausdruckslos expressionless','😶':'ohne mund mute','👎':'daumen runter thumbs down',
+      '👊':'faust fist bump','✊':'faust raised fist','👌':'ok perfekt perfect','🤌':'italiano',
+      '✌️':'peace victory','🤝':'handschlag handshake','👋':'winken wave hallo',
+      '📌':'pin nadel','📎':'klammer clip','📁':'ordner folder','📂':'ordner offen folder open',
+      '📅':'kalender calendar','📊':'diagramm chart','💻':'laptop computer','📱':'handy phone',
+      '📧':'email mail','🔔':'glocke bell','📢':'lautsprecher megaphone','🎶':'noten music',
+      '🎤':'mikrofon microphone','🎸':'gitarre guitar','🎹':'klavier piano keyboard',
+      '❌':'nein no kreuz cross','❗':'ausrufezeichen exclamation','❓':'fragezeichen question',
+      '⚠️':'warnung warning achtung','🟢':'grün green','🔴':'rot red','🟡':'gelb yellow',
+      '🔵':'blau blue','🔄':'aktualisieren refresh reload','✨':'glitzer sparkle',
+      '💥':'boom explosion','💛':'gelbes herz yellow heart','💚':'grünes herz green heart',
+      '💙':'blaues herz blue heart','💜':'lila herz purple heart',
+    };
+
+    const EMOJI_DATA = {
+      'Häufig': ['👍', '❤️', '😂', '🎉', '👏', '🔥', '✅', '💪', '🙏', '😊', '👀', '💡', '📝', '🎵', '⭐'],
+      'Smileys': ['😀', '😃', '😄', '😁', '😅', '🤣', '😊', '😇', '🙂', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😜', '🤪', '😝', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶'],
+      'Gesten': ['👍', '👎', '👊', '✊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✌️', '🤟', '🤘', '👌', '🤌', '👈', '👉', '👆', '👇', '☝️', '✋', '🤚', '🖐️', '🖖', '👋', '💪'],
+      'Objekte': ['📝', '📌', '📎', '📁', '📂', '📅', '📆', '📊', '📈', '📉', '💻', '🖥️', '📱', '☎️', '📧', '✉️', '📮', '🔔', '🔕', '📢', '🎵', '🎶', '🎤', '🎸', '🎹'],
+      'Symbole': ['✅', '❌', '⭕', '❗', '❓', '⚠️', '🔴', '🟡', '🟢', '🔵', '⬛', '⬜', '◼️', '◻️', '▶️', '⏸️', '⏹️', '🔄', '✨', '💫', '💥', '🔥', '❤️', '💛', '💚', '💙', '💜'],
+    };
+
+    // ============================================================
+    // DATA SERVICE ABSTRACTION LAYER
+    // ============================================================
+    class DataService {
+      constructor(supabaseClient = null) {
+        this.sb = supabaseClient;
+        this.isDemo = !supabaseClient;
+        this.subscriptions = [];
+      }
+
+      async getUsers() {
+        if (this.isDemo) return [...MOCK_USERS];
+        try {
+          const { data, error } = await this.sb.from('users').select('*').order('display_name');
+          if (error) throw error;
+          return data || [];
+        } catch (err) {
+          console.error('getUsers error:', err);
+          return [];
+        }
+      }
+
+      async getTeams() {
+        if (this.isDemo) return [...MOCK_TEAMS];
+        try {
+          const { data, error } = await this.sb.from('teams').select('*').order('category, name');
+          if (error) throw error;
+          return data || [];
+        } catch (err) {
+          console.error('getTeams error:', err);
+          return [];
+        }
+      }
+
+      async getChannels(teamId) {
+        if (this.isDemo) return MOCK_CHANNELS[teamId] || [{ id: `default-${teamId}`, name: 'Allgemein', team_id: teamId }];
+        try {
+          const { data, error } = await this.sb.from('channels').select('*').eq('team_id', teamId).order('name');
+          if (error) throw error;
+          return data || [];
+        } catch (err) {
+          console.error('getChannels error:', err);
+          return [];
+        }
+      }
+
+      async getPosts(channelId) {
+        if (this.isDemo) return MOCK_POSTS[channelId] || [];
+        try {
+          const { data, error } = await this.sb.from('posts').select('*, author:users(*)').eq('channel_id', channelId).is('parent_id', null).order('created_at', { ascending: false });
+          if (error) throw error;
+          return data || [];
+        } catch (err) {
+          console.error('getPosts error:', err);
+          return [];
+        }
+      }
+
+      async createPost(channelId, authorId, content, title = null) {
+        if (this.isDemo) {
+          const author = MOCK_USERS.find(u => u.id === authorId);
+          const post = { id: 'p' + Date.now(), channel_id: channelId, author, content, title, reactions: [], replies: 0, reply_users: [], created_at: new Date().toLocaleString('de-DE') };
+          if (!MOCK_POSTS[channelId]) MOCK_POSTS[channelId] = [];
+          MOCK_POSTS[channelId].unshift(post);
+          return post;
+        }
+        try {
+          const { data, error } = await this.sb.from('posts').insert({ channel_id: channelId, author_id: authorId, content, title }).select('*, author:users(*)').single();
+          if (error) throw error;
+          return data;
+        } catch (err) {
+          console.error('createPost error:', err);
+          return null;
+        }
+      }
+
+      async getReplies(postId) {
+        if (this.isDemo) return MOCK_REPLIES[postId] || [];
+        try {
+          const { data, error } = await this.sb.from('posts').select('*, author:users(*)').eq('parent_id', postId).order('created_at');
+          if (error) throw error;
+          return data || [];
+        } catch (err) {
+          console.error('getReplies error:', err);
+          return [];
+        }
+      }
+
+      async createReply(postId, channelId, authorId, content) {
+        if (this.isDemo) {
+          const author = MOCK_USERS.find(u => u.id === authorId);
+          const reply = { id: 'r' + Date.now(), parent_id: postId, author, content, created_at: new Date().toLocaleString('de-DE') };
+          if (!MOCK_REPLIES[postId]) MOCK_REPLIES[postId] = [];
+          MOCK_REPLIES[postId].push(reply);
+          return reply;
+        }
+        try {
+          const { data, error } = await this.sb.from('posts').insert({ parent_id: postId, channel_id: channelId, author_id: authorId, content }).select('*, author:users(*)').single();
+          if (error) throw error;
+          return data;
+        } catch (err) {
+          console.error('createReply error:', err);
+          return null;
+        }
+      }
+
+      async getConversations(userId) {
+        if (this.isDemo) return [...MOCK_CONVERSATIONS];
+        try {
+          const { data: memberships, error: err1 } = await this.sb.from('conversation_members').select('conversation_id').eq('user_id', userId);
+          if (err1) throw err1;
+          if (!memberships?.length) return [];
+          const convIds = memberships.map(m => m.conversation_id);
+          const { data, error } = await this.sb.from('conversations').select('*').in('id', convIds);
+          if (error) throw error;
+          return data || [];
+        } catch (err) {
+          console.error('getConversations error:', err);
+          return [];
+        }
+      }
+
+      async getMessages(conversationId) {
+        if (this.isDemo) return MOCK_MESSAGES[conversationId] || [];
+        try {
+          const { data, error } = await this.sb.from('messages').select('*, sender:users(*)').eq('conversation_id', conversationId).order('created_at');
+          if (error) throw error;
+          return data || [];
+        } catch (err) {
+          console.error('getMessages error:', err);
+          return [];
+        }
+      }
+
+      async sendMessage(conversationId, senderId, content) {
+        if (this.isDemo) {
+          const sender = MOCK_USERS.find(u => u.id === senderId);
+          const msg = { id: 'm' + Date.now(), conversation_id: conversationId, sender, content, created_at: new Date().toLocaleString('de-DE') };
+          if (!MOCK_MESSAGES[conversationId]) MOCK_MESSAGES[conversationId] = [];
+          MOCK_MESSAGES[conversationId].push(msg);
+          return msg;
+        }
+        try {
+          const { data, error } = await this.sb.from('messages').insert({ conversation_id: conversationId, sender_id: senderId, content }).select('*, sender:users(*)').single();
+          if (error) throw error;
+          return data;
+        } catch (err) {
+          console.error('sendMessage error:', err);
+          return null;
+        }
+      }
+
+      subscribeToChannel(channelId, onNewPost) {
+        if (this.isDemo) return () => {};
+        try {
+          const sub = this.sb.channel('posts-' + channelId)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts', filter: `channel_id=eq.${channelId}` },
+              payload => onNewPost(payload.new))
+            .subscribe();
+          this.subscriptions.push(sub);
+          return () => sub.unsubscribe();
+        } catch (err) {
+          console.error('subscribeToChannel error:', err);
+          return () => {};
+        }
+      }
+
+      subscribeToConversation(conversationId, onNewMessage) {
+        if (this.isDemo) return () => {};
+        try {
+          const sub = this.sb.channel('messages-' + conversationId)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
+              payload => onNewMessage(payload.new))
+            .subscribe();
+          this.subscriptions.push(sub);
+          return () => sub.unsubscribe();
+        } catch (err) {
+          console.error('subscribeToConversation error:', err);
+          return () => {};
+        }
+      }
+
+      cleanup() {
+        this.subscriptions.forEach(s => {
+          try { s.unsubscribe(); } catch (e) { }
+        });
+        this.subscriptions = [];
+      }
+    }
+
+    // ============================================================
+    const KRS_LOGO = 'data:image/png;base64,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';
+
+    // ICONS (string format for easier rendering)
+    // ============================================================
+    const Icons = {
+      teams: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+      chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
+      send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+      plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+      back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>',
+      logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+      x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    };
+
+    // ============================================================
+    // COMPONENTS
+    // ============================================================
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    function getInitials(name) {
+      return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    }
+
+    function Avatar({ user, size = 36 }) {
+      const style = { width: size, height: size, fontSize: size * 0.38, background: user.avatar_color };
+      return React.createElement('div', { className: 'avatar', style }, getInitials(user.display_name));
+    }
+
+    function EmojiPicker({ onSelect, onClose, position }) {
+      const [search, setSearch] = useState('');
+
+      const filtered = useMemo(() => {
+        if (!search) return EMOJI_DATA;
+        const s = search.toLowerCase();
+        const result = {};
+        for (const [cat, emojis] of Object.entries(EMOJI_DATA)) {
+          const f = emojis.filter(e => {
+            const names = EMOJI_NAMES[e] || '';
+            return names.toLowerCase().includes(s) || e.includes(s);
+          });
+          if (f.length) result[cat] = f;
+        }
+        return result;
+      }, [search]);
+
+      return React.createElement('div', { className: 'emoji-picker-overlay', onClick: onClose },
+        React.createElement('div', { className: 'emoji-picker', style: { bottom: position?.bottom || '60px', right: position?.right || '24px' }, onClick: e => e.stopPropagation() },
+          React.createElement('div', { className: 'emoji-picker-header' },
+            React.createElement('input', { type: 'text', placeholder: 'Emoji suchen...', value: search, onChange: e => setSearch(e.target.value), autoFocus: true })
+          ),
+          React.createElement('div', { className: 'emoji-grid' },
+            Object.entries(filtered).map(([cat, emojis]) =>
+              React.createElement(React.Fragment, { key: cat },
+                React.createElement('div', { className: 'emoji-category' }, cat),
+                emojis.map(emoji =>
+                  React.createElement('button', { key: emoji, className: 'emoji-btn', onClick: () => { onSelect(emoji); onClose(); } }, emoji)
+                )
+              )
+            )
+          )
+        )
+      );
+    }
+
+    function SetupScreen({ onSetupComplete }) {
+      const [url, setUrl] = useState('');
+      const [key, setKey] = useState('');
+      const [demo, setDemo] = useState(true);
+      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(false);
+
+      const handleSetup = async () => {
+        if (demo) {
+          onSetupComplete({ isDemo: true });
+          return;
+        }
+        if (!url.trim() || !key.trim()) {
+          setError('Bitte beide Felder ausfüllen');
+          return;
+        }
+        setLoading(true);
+        try {
+          const { createClient } = window.supabase;
+          const client = createClient(url, key);
+          const { data } = await client.auth.getSession();
+          if (!data.session) {
+            setError('Supabase Credentials ungültig');
+            setLoading(false);
+            return;
+          }
+          onSetupComplete({ isDemo: false, client });
+        } catch (err) {
+          setError('Fehler: ' + err.message);
+          setLoading(false);
+        }
+      };
+
+      return React.createElement('div', { className: 'setup-screen' },
+        React.createElement('img', { src: KRS_LOGO, alt: 'KRS Logo', style: { width: '80px', height: '80px', objectFit: 'contain', marginBottom: '12px' } }),
+        React.createElement('h1', null, 'KRS Connect'),
+        React.createElement('p', null, 'Wähle einen Modus:'),
+        React.createElement('label', null,
+          React.createElement('input', { type: 'radio', checked: demo, onChange: () => { setDemo(true); setError(''); } }),
+          ' Demo-Modus (Mock-Daten)'
+        ),
+        React.createElement('label', null,
+          React.createElement('input', { type: 'radio', checked: !demo, onChange: () => { setDemo(false); setError(''); } }),
+          ' Supabase verbinden'
+        ),
+        !demo && React.createElement(React.Fragment, null,
+          React.createElement('input', { type: 'text', placeholder: 'Supabase URL', value: url, onChange: e => setUrl(e.target.value) }),
+          React.createElement('input', { type: 'password', placeholder: 'API Key', value: key, onChange: e => setKey(e.target.value) })
+        ),
+        error && React.createElement('p', { style: { color: 'var(--danger)', marginTop: '10px' } }, error),
+        React.createElement('button', { onClick: handleSetup, disabled: loading }, loading ? 'Verbindung wird hergestellt...' : 'Verbinden')
+      );
+    }
+
+    function UserSelection({ users, onUserSelected }) {
+      return React.createElement('div', { className: 'setup-screen' },
+        React.createElement('h1', null, 'Wer bist du?'),
+        React.createElement('div', { className: 'user-grid' },
+          users.map(user =>
+            React.createElement('button', { key: user.id, className: 'user-btn', onClick: () => onUserSelected(user) },
+              React.createElement(Avatar, { user, size: 48 }),
+              React.createElement('div', { className: 'user-btn-name' }, user.display_name)
+            )
+          )
+        )
+      );
+    }
+
+    function PostList({ posts, dataService, user, onOpenThread }) {
+      const [newPostTitle, setNewPostTitle] = useState('');
+      const [newPostContent, setNewPostContent] = useState('');
+      const [saving, setSaving] = useState(false);
+
+      const handleCreatePost = async (e) => {
+        e.preventDefault();
+        if (!newPostContent.trim()) return;
+        setSaving(true);
+        const channelId = posts[0]?.channel_id || 1;
+        await dataService.createPost(channelId, user.id, newPostContent, newPostTitle || undefined);
+        setNewPostTitle('');
+        setNewPostContent('');
+        setSaving(false);
+      };
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('form', { onSubmit: handleCreatePost, style: { marginBottom: '20px' } },
+          React.createElement('input', { type: 'text', placeholder: 'Titel (optional)', value: newPostTitle, onChange: e => setNewPostTitle(e.target.value), style: { display: 'block', width: '100%', padding: '10px', marginBottom: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px' } }),
+          React.createElement('textarea', { placeholder: 'Nachricht schreiben...', value: newPostContent, onChange: e => setNewPostContent(e.target.value), style: { display: 'block', width: '100%', padding: '10px', marginBottom: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px', minHeight: '80px', fontFamily: 'inherit', fontWeight: 'inherit' } }),
+          React.createElement('button', { type: 'submit', disabled: saving, style: { padding: '8px 16px', background: saving ? 'var(--text-muted)' : 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius)', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '14px' } }, saving ? 'Wird gesendet...' : 'Posten')
+        ),
+        posts.map(post =>
+          React.createElement('div', { key: post.id, className: 'post' },
+            React.createElement('div', { className: 'post-header' },
+              React.createElement(Avatar, { user: post.author, size: 36 }),
+              React.createElement('div', null,
+                React.createElement('div', { className: 'post-author' }, post.author.display_name),
+                React.createElement('div', { className: 'post-time' }, post.created_at)
+              )
+            ),
+            post.title && React.createElement('div', { className: 'post-title' }, post.title),
+            React.createElement('div', { className: 'post-content', dangerouslySetInnerHTML: { __html: post.content } }),
+            post.reactions && post.reactions.length > 0 && React.createElement('div', { className: 'post-reactions' },
+              post.reactions.map(r =>
+                React.createElement('div', { key: r.emoji, className: 'reaction' }, r.emoji + ' ' + r.count)
+              )
+            ),
+            React.createElement('div', { className: 'post-footer' },
+              React.createElement('button', { onClick: () => onOpenThread(post) }, '💬 Antworten (' + post.replies + ')')
+            )
+          )
+        )
+      );
+    }
+
+    function ThreadPanel({ post, replies, dataService, user, onClose }) {
+      const [replyContent, setReplyContent] = useState('');
+      const [saving, setSaving] = useState(false);
+
+      const handleSendReply = async (e) => {
+        e.preventDefault();
+        if (!replyContent.trim()) return;
+        setSaving(true);
+        await dataService.createReply(post.id, post.channel_id || 1, user.id, replyContent);
+        setReplyContent('');
+        setSaving(false);
+      };
+
+      return React.createElement('div', { className: 'thread-container', onClick: onClose },
+        React.createElement('div', { className: 'thread-panel', onClick: e => e.stopPropagation() },
+          React.createElement('div', { className: 'thread-header' },
+            React.createElement('h3', null, 'Antworten'),
+            React.createElement('button', { className: 'icon-btn', onClick: onClose, dangerouslySetInnerHTML: { __html: Icons.x } })
+          ),
+          React.createElement('div', { className: 'thread-body' },
+            React.createElement('div', { className: 'post' },
+              React.createElement('div', { className: 'post-header' },
+                React.createElement(Avatar, { user: post.author, size: 36 }),
+                React.createElement('div', null,
+                  React.createElement('div', { className: 'post-author' }, post.author.display_name),
+                  React.createElement('div', { className: 'post-time' }, post.created_at)
+                )
+              ),
+              post.title && React.createElement('div', { className: 'post-title' }, post.title),
+              React.createElement('div', { className: 'post-content', dangerouslySetInnerHTML: { __html: post.content } })
+            ),
+            replies.map(reply =>
+              React.createElement('div', { key: reply.id, className: 'thread-reply' },
+                React.createElement('div', { className: 'thread-reply-author' }, reply.author.display_name),
+                React.createElement('div', { className: 'thread-reply-time' }, reply.created_at),
+                React.createElement('div', { className: 'thread-reply-content' }, reply.content)
+              )
+            )
+          ),
+          React.createElement('div', { className: 'thread-footer' },
+            React.createElement('form', { onSubmit: handleSendReply, style: { display: 'flex', gap: '8px', width: '100%' } },
+              React.createElement('textarea', { placeholder: 'Antwort schreiben...', value: replyContent, onChange: e => setReplyContent(e.target.value), style: { flex: 1, padding: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px', minHeight: '60px', fontFamily: 'inherit', fontWeight: 'inherit', resize: 'none' } }),
+              React.createElement('button', { type: 'submit', disabled: saving, style: { padding: '8px 16px', background: saving ? 'var(--text-muted)' : 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius)', cursor: saving ? 'not-allowed' : 'pointer', alignSelf: 'flex-end', whiteSpace: 'nowrap', fontSize: '14px' } }, saving ? 'Wird gesendet...' : 'Senden')
+            )
+          )
+        )
+      );
+    }
+
+    // ============================================================
+    // CHAT COMPONENTS
+    // ============================================================
+
+    function ConversationList({ conversations, currentUser, selectedId, onSelect, onNewChat, allUsers }) {
+      const [showNewChat, setShowNewChat] = useState(false);
+
+      return React.createElement('div', { className: 'conversation-list' },
+        React.createElement('div', { className: 'conversation-header' },
+          React.createElement('h2', null, 'Chats'),
+          React.createElement('button', {
+            className: 'new-chat-btn',
+            onClick: () => setShowNewChat(!showNewChat),
+            title: 'Neuer Chat',
+            dangerouslySetInnerHTML: { __html: showNewChat ? Icons.x : Icons.plus }
+          })
+        ),
+        showNewChat && React.createElement('div', { className: 'new-chat-picker' },
+          allUsers
+            .filter(u => u.id !== currentUser.id)
+            .map(u => React.createElement('button', {
+              key: u.id,
+              className: 'user-pick-btn',
+              onClick: () => { onNewChat(u); setShowNewChat(false); }
+            },
+              React.createElement(Avatar, { user: u, size: 28 }),
+              React.createElement('span', null, u.display_name)
+            ))
+        ),
+        React.createElement('div', { className: 'conversation-items' },
+          conversations.map(conv =>
+            React.createElement('button', {
+              key: conv.id,
+              className: 'conversation-item' + (selectedId === conv.id ? ' active' : ''),
+              onClick: () => onSelect(conv)
+            },
+              React.createElement(Avatar, { user: conv.user, size: 40 }),
+              React.createElement('div', { className: 'conversation-info' },
+                React.createElement('div', { className: 'conversation-name' }, conv.user.display_name),
+                React.createElement('div', { className: 'conversation-preview' }, conv.lastMessage)
+              ),
+              React.createElement('div', { className: 'conversation-meta' },
+                React.createElement('span', { className: 'conversation-time' }, conv.time),
+                conv.unread > 0 && React.createElement('span', { className: 'unread-badge' }, conv.unread)
+              )
+            )
+          ),
+          conversations.length === 0 && React.createElement('div', { style: { padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' } }, 'Noch keine Chats. Starte einen neuen Chat!')
+        )
+      );
+    }
+
+    function ChatPanel({ conversation, messages, dataService, currentUser, onBack }) {
+      const [input, setInput] = useState('');
+      const [sending, setSending] = useState(false);
+      const messagesEndRef = useRef(null);
+
+      useEffect(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, [messages]);
+
+      const handleSend = async (e) => {
+        e.preventDefault();
+        if (!input.trim() || sending) return;
+        setSending(true);
+        await dataService.sendMessage(conversation.id, currentUser.id, input);
+        setInput('');
+        setSending(false);
+      };
+
+      const isOwn = (msg) => {
+        const senderId = msg.sender?.id || msg.sender_id;
+        return senderId === currentUser.id;
+      };
+
+      if (!conversation) {
+        return React.createElement('div', { className: 'chat-empty' },
+          React.createElement('div', { style: { fontSize: '48px' } }, '💬'),
+          React.createElement('div', null, 'Wähle einen Chat oder starte einen neuen')
+        );
+      }
+
+      return React.createElement('div', { className: 'chat-panel' },
+        React.createElement('div', { className: 'chat-header' },
+          onBack && React.createElement('button', { className: 'back-btn', onClick: onBack, dangerouslySetInnerHTML: { __html: Icons.back } }),
+          React.createElement(Avatar, { user: conversation.user, size: 32 }),
+          React.createElement('span', { className: 'chat-header-name' }, conversation.user.display_name)
+        ),
+        React.createElement('div', { className: 'chat-messages' },
+          messages.map(msg =>
+            React.createElement('div', {
+              key: msg.id,
+              className: 'chat-msg ' + (isOwn(msg) ? 'own' : 'other')
+            },
+              !isOwn(msg) && React.createElement(Avatar, { user: msg.sender, size: 28 }),
+              React.createElement('div', { className: 'chat-bubble ' + (isOwn(msg) ? 'own' : 'other') },
+                React.createElement('div', { className: 'chat-text' }, msg.content),
+                React.createElement('div', { className: 'chat-time' }, msg.created_at)
+              )
+            )
+          ),
+          messages.length === 0 && React.createElement('div', { className: 'chat-empty' },
+            React.createElement('div', null, 'Noch keine Nachrichten. Schreib die erste!')
+          ),
+          React.createElement('div', { ref: messagesEndRef })
+        ),
+        React.createElement('form', { className: 'chat-input-bar', onSubmit: handleSend },
+          React.createElement('input', {
+            type: 'text',
+            placeholder: 'Nachricht schreiben...',
+            value: input,
+            onChange: e => setInput(e.target.value),
+            disabled: sending
+          }),
+          React.createElement('button', {
+            type: 'submit',
+            className: 'chat-send-btn',
+            disabled: sending || !input.trim(),
+            dangerouslySetInnerHTML: { __html: Icons.send }
+          })
+        )
+      );
+    }
+
+    // ============================================================
+    // APP COMPONENT
+    // ============================================================
+
+    function App() {
+      const [setupComplete, setSetupComplete] = useState(false);
+      const [supabaseClient, setSupabaseClient] = useState(null);
+      const [isDemo, setIsDemo] = useState(true);
+      const [user, setUser] = useState(null);
+
+      // View: 'teams' or 'chat'
+      const [view, setView] = useState('teams');
+
+      // Teams state
+      const [teams, setTeams] = useState([]);
+      const [selectedTeam, setSelectedTeam] = useState(null);
+      const [channels, setChannels] = useState([]);
+      const [selectedChannel, setSelectedChannel] = useState(null);
+      const [posts, setPosts] = useState([]);
+      const [replies, setReplies] = useState([]);
+      const [openThread, setOpenThread] = useState(null);
+
+      // Chat state
+      const [conversations, setConversations] = useState([]);
+      const [selectedConversation, setSelectedConversation] = useState(null);
+      const [chatMessages, setChatMessages] = useState([]);
+      const [allUsers, setAllUsers] = useState([]);
+
+      const dataService = useMemo(() => new DataService(isDemo ? null : supabaseClient), [supabaseClient, isDemo]);
+
+      const handleSetupComplete = ({ isDemo: demoMode, client }) => {
+        setIsDemo(demoMode);
+        if (client) setSupabaseClient(client);
+        setSetupComplete(true);
+      };
+
+      const handleUserSelected = async (selectedUser) => {
+        setUser(selectedUser);
+        // Load teams
+        const teamsData = await dataService.getTeams();
+        setTeams(teamsData);
+        if (teamsData.length > 0) {
+          const firstTeam = teamsData[0];
+          setSelectedTeam(firstTeam);
+          const channelsData = await dataService.getChannels(firstTeam.id);
+          setChannels(channelsData);
+          if (channelsData.length > 0) {
+            setSelectedChannel(channelsData[0]);
+          }
+        }
+        // Load conversations + all users for chat
+        const convData = await dataService.getConversations(selectedUser.id);
+        setConversations(convData || []);
+        const usersData = await dataService.getUsers();
+        setAllUsers(usersData || MOCK_USERS);
+      };
+
+      // Posts subscription
+      useEffect(() => {
+        if (selectedChannel) {
+          let cancelled = false;
+          const loadPosts = async () => {
+            const postsData = await dataService.getPosts(selectedChannel.id);
+            if (!cancelled) setPosts(postsData);
+          };
+          loadPosts();
+          const unsub = dataService.subscribeToChannel(selectedChannel.id, newPost => {
+            if (!cancelled) setPosts(prev => [newPost, ...prev]);
+          });
+          return () => { cancelled = true; unsub(); };
+        }
+      }, [selectedChannel, dataService]);
+
+      // Thread replies
+      useEffect(() => {
+        if (openThread) {
+          let cancelled = false;
+          const loadReplies = async () => {
+            const repliesData = await dataService.getReplies(openThread.id);
+            if (!cancelled) setReplies(repliesData);
+          };
+          loadReplies();
+          return () => { cancelled = true; };
+        }
+      }, [openThread, dataService]);
+
+      // Chat messages subscription
+      useEffect(() => {
+        if (selectedConversation) {
+          let cancelled = false;
+          const loadMessages = async () => {
+            const msgs = await dataService.getMessages(selectedConversation.id);
+            if (!cancelled) setChatMessages(msgs || []);
+          };
+          loadMessages();
+          const unsub = dataService.subscribeToConversation(selectedConversation.id, newMsg => {
+            if (!cancelled) setChatMessages(prev => [...prev, newMsg]);
+          });
+          return () => { cancelled = true; unsub(); };
+        }
+      }, [selectedConversation, dataService]);
+
+      const handleTeamSelect = async (team) => {
+        setSelectedTeam(team);
+        const channelsData = await dataService.getChannels(team.id);
+        setChannels(channelsData);
+        if (channelsData.length > 0) {
+          setSelectedChannel(channelsData[0]);
+        }
+      };
+
+      const handleNewChat = (targetUser) => {
+        // Check if conversation already exists
+        const existing = conversations.find(c => c.user.id === targetUser.id);
+        if (existing) {
+          setSelectedConversation(existing);
+          return;
+        }
+        // Create new conversation (demo mode: local only)
+        const newConv = {
+          id: 'new-' + Date.now(),
+          user: targetUser,
+          lastMessage: '',
+          time: 'Jetzt',
+          unread: 0
+        };
+        setConversations(prev => [newConv, ...prev]);
+        setSelectedConversation(newConv);
+      };
+
+      const handleLogout = () => {
+        dataService.cleanup();
+        setSetupComplete(false);
+        setUser(null);
+        setView('teams');
+        setTeams([]);
+        setSelectedTeam(null);
+        setChannels([]);
+        setSelectedChannel(null);
+        setPosts([]);
+        setConversations([]);
+        setSelectedConversation(null);
+        setChatMessages([]);
+      };
+
+      if (!setupComplete) {
+        return React.createElement(SetupScreen, { onSetupComplete: handleSetupComplete });
+      }
+
+      if (!user) {
+        return React.createElement(UserSelection, { users: MOCK_USERS, onUserSelected: handleUserSelected });
+      }
+
+      // === TEAMS VIEW ===
+      const teamsView = React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'sidebar-content' },
+          React.createElement('div', { className: 'sidebar-header' },
+            React.createElement('h2', null, 'Teams')
+          ),
+          React.createElement('div', { className: 'sidebar-list' },
+            teams.map(team =>
+              React.createElement('button', {
+                key: team.id,
+                className: 'list-item' + (selectedTeam?.id === team.id ? ' active' : ''),
+                onClick: () => handleTeamSelect(team),
+                style: { display: 'flex', gap: '8px', alignItems: 'center' }
+              },
+                React.createElement('div', { style: { width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: team.icon_color, borderRadius: 'var(--radius)', color: 'white', fontSize: '12px', fontWeight: '600' } }, team.icon_text),
+                React.createElement('span', { className: 'list-item-text' }, team.name)
+              )
+            )
+          )
+        ),
+        React.createElement('div', { className: 'sidebar-content' },
+          selectedTeam && React.createElement(React.Fragment, null,
+            React.createElement('div', { className: 'sidebar-header' },
+              React.createElement('h2', null, '# Kanäle')
+            ),
+            React.createElement('div', { className: 'sidebar-list' },
+              channels.map(ch =>
+                React.createElement('button', {
+                  key: ch.id,
+                  className: 'list-item' + (selectedChannel?.id === ch.id ? ' active' : ''),
+                  onClick: () => setSelectedChannel(ch)
+                },
+                  React.createElement('span', { style: { fontSize: '12px' } }, '#'),
+                  React.createElement('span', { className: 'list-item-text' }, ch.name),
+                  ch.unread > 0 && React.createElement('span', { className: 'list-item-badge' }, ch.unread)
+                )
+              )
+            )
+          )
+        ),
+        React.createElement('div', { className: 'content' },
+          selectedChannel && React.createElement(React.Fragment, null,
+            React.createElement('div', { className: 'content-header' },
+              React.createElement('h1', null, '# ' + selectedChannel.name)
+            ),
+            React.createElement('div', { className: 'content-body' },
+              React.createElement(PostList, { posts, dataService, user, onOpenThread: setOpenThread })
+            )
+          )
+        )
+      );
+
+      // === CHAT VIEW ===
+      const chatView = React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'sidebar-content', style: { borderRight: '1px solid var(--border)' } },
+          React.createElement(ConversationList, {
+            conversations,
+            currentUser: user,
+            selectedId: selectedConversation?.id,
+            onSelect: setSelectedConversation,
+            onNewChat: handleNewChat,
+            allUsers
+          })
+        ),
+        React.createElement('div', { className: 'content' },
+          React.createElement(ChatPanel, {
+            conversation: selectedConversation,
+            messages: chatMessages,
+            dataService,
+            currentUser: user,
+            onBack: null
+          })
+        )
+      );
+
+      return React.createElement('div', { className: 'app-layout' },
+        // Sidebar mit View-Switcher
+        React.createElement('div', { className: 'sidebar' },
+          React.createElement('div', { className: 'sidebar-logo' }, React.createElement('img', { src: KRS_LOGO, alt: 'KRS', style: { width: '32px', height: '32px', objectFit: 'contain' } })),
+          React.createElement('div', { className: 'sidebar-nav' },
+            React.createElement('button', {
+              className: 'nav-item' + (view === 'teams' ? ' active' : ''),
+              onClick: () => setView('teams'),
+              title: 'Teams & Kanäle',
+              dangerouslySetInnerHTML: { __html: Icons.teams }
+            }),
+            React.createElement('button', {
+              className: 'nav-item' + (view === 'chat' ? ' active' : ''),
+              onClick: () => setView('chat'),
+              title: 'Chats',
+              dangerouslySetInnerHTML: { __html: Icons.chat }
+            })
+          ),
+          React.createElement('div', { className: 'sidebar-bottom' },
+            React.createElement('button', { className: 'icon-btn', onClick: handleLogout, title: 'Abmelden', dangerouslySetInnerHTML: { __html: Icons.logout } })
+          )
+        ),
+        // Main content: Teams oder Chat
+        React.createElement('div', { className: 'main' },
+          view === 'teams' ? teamsView : chatView
+        ),
+        // Thread overlay (nur in Teams-View)
+        view === 'teams' && openThread && React.createElement(ThreadPanel, { post: openThread, replies, dataService, user, onClose: () => setOpenThread(null) })
+      );
+    }
+
+    // ============================================================
+    // RENDER APP
+    // ============================================================
+    const root = ReactDOM.createRoot(document.getElementById('app'));
+    root.render(React.createElement(App));
+  </script>
+</body>
+</html>
