@@ -1484,8 +1484,8 @@
       return React.createElement('div', { className: 'chat-panel' },
         React.createElement('div', { className: 'chat-header' },
           onBack && React.createElement('button', { className: 'back-btn', onClick: onBack, dangerouslySetInnerHTML: { __html: Icons.back } }),
-          React.createElement(Avatar, { user: conversation.user, size: 32 }),
-          React.createElement('span', { className: 'chat-header-name' }, conversation.user.display_name)
+          React.createElement(Avatar, { user: conversation.user || { display_name: 'Chat', avatar_color: '#999' }, size: 32 }),
+          React.createElement('span', { className: 'chat-header-name' }, (conversation.user || {}).display_name || 'Chat')
         ),
         React.createElement('div', { className: 'chat-messages' },
           messages.map(msg =>
@@ -1496,7 +1496,7 @@
               !isOwn(msg) && React.createElement(Avatar, { user: msg.sender, size: 28 }),
               React.createElement('div', { className: 'chat-bubble ' + (isOwn(msg) ? 'own' : 'other') },
                 React.createElement('div', { className: 'chat-text' }, msg.content),
-                React.createElement('div', { className: 'chat-time' }, msg.created_at)
+                React.createElement('div', { className: 'chat-time' }, formatDate(msg.created_at))
               )
             )
           ),
