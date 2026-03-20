@@ -1063,7 +1063,19 @@
         try {
           const sub = this.sb.channel('posts-' + channelId)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts', filter: `channel_id=eq.${channelId}` },
-              payload => onNewPost(payload.new))
+              async (payload) => {
+                const post = payload.new;
+                // Author nachladen (Realtime liefert nur author_id, kein JOIN)
+                if (post.author_id && !post.author) {
+                  try {
+                    const { data: author } = await this.sb.from('users').select('*').eq('id', post.author_id).single();
+                    post.author = author;
+                  } catch (e) {
+                    post.author = { display_name: 'Unbekannt', avatar_color: '#999' };
+                  }
+                }
+                onNewPost(post);
+              })
             .subscribe();
           this.subscriptions.push(sub);
           return () => sub.unsubscribe();
@@ -1078,7 +1090,18 @@
         try {
           const sub = this.sb.channel('messages-' + conversationId)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
-              payload => onNewMessage(payload.new))
+              async (payload) => {
+                const msg = payload.new;
+                if (msg.sender_id && !msg.sender) {
+                  try {
+                    const { data: sender } = await this.sb.from('users').select('*').eq('id', msg.sender_id).single();
+                    msg.sender = sender;
+                  } catch (e) {
+                    msg.sender = { display_name: 'Unbekannt', avatar_color: '#999' };
+                  }
+                }
+                onNewMessage(msg);
+              })
             .subscribe();
           this.subscriptions.push(sub);
           return () => sub.unsubscribe();
@@ -1161,35 +1184,49 @@
       );
     }
 
+    // Supabase-Konfiguration (fest eingebaut)
+    const SUPABASE_URL = 'https://ooejsfixxiuobrpqgfqm.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vZWpzZml4eGl1b2JycHFnZnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwMjQ5MDYsImV4cCI6MjA4OTYwMDkwNn0.GbAv-sB4B8nNE3IPfiYIjbkMKs0Aq03c_-TUcmFY_5s';
+
+    // Hilfsfunktion: Datum lesbar formatieren
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        const now = new Date();
+        const diff = now - d;
+        if (diff < 60000) return 'Gerade eben';
+        if (diff < 3600000) return Math.floor(diff / 60000) + ' Min.';
+        if (diff < 86400000 && d.getDate() === now.getDate()) return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        if (diff < 172800000) return 'Gestern, ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ', ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      } catch { return dateStr; }
+    }
+
     function SetupScreen({ onSetupComplete }) {
-      const [url, setUrl] = useState('');
-      const [key, setKey] = useState('');
-      const [demo, setDemo] = useState(true);
       const [error, setError] = useState('');
       const [loading, setLoading] = useState(false);
 
-      const handleSetup = async () => {
-        if (demo) {
+      const handleConnect = async (useDemo) => {
+        if (useDemo) {
           onSetupComplete({ isDemo: true });
           return;
         }
-        if (!url.trim() || !key.trim()) {
-          setError('Bitte beide Felder ausfüllen');
-          return;
-        }
         setLoading(true);
+        setError('');
         try {
           const { createClient } = window.supabase;
-          const client = createClient(url, key);
+          const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
           const { data, error: dbError } = await client.from('users').select('id').limit(1);
           if (dbError) {
-            setError('Supabase Credentials ungültig: ' + dbError.message);
+            setError('Verbindung fehlgeschlagen: ' + dbError.message);
             setLoading(false);
             return;
           }
           onSetupComplete({ isDemo: false, client });
         } catch (err) {
-          setError('Fehler: ' + err.message);
+          setError('Verbindung fehlgeschlagen: ' + err.message);
           setLoading(false);
         }
       };
@@ -1197,51 +1234,61 @@
       return React.createElement('div', { className: 'setup-screen' },
         React.createElement('img', { src: KRS_LOGO, alt: 'KRS Logo', style: { width: '80px', height: '80px', objectFit: 'contain', marginBottom: '12px' } }),
         React.createElement('h1', null, 'KRS Connect'),
-        React.createElement('p', null, 'Wähle einen Modus:'),
-        React.createElement('label', null,
-          React.createElement('input', { type: 'radio', checked: demo, onChange: () => { setDemo(true); setError(''); } }),
-          ' Demo-Modus (Mock-Daten)'
-        ),
-        React.createElement('label', null,
-          React.createElement('input', { type: 'radio', checked: !demo, onChange: () => { setDemo(false); setError(''); } }),
-          ' Supabase verbinden'
-        ),
-        !demo && React.createElement(React.Fragment, null,
-          React.createElement('input', { type: 'text', placeholder: 'Supabase URL', value: url, onChange: e => setUrl(e.target.value) }),
-          React.createElement('input', { type: 'password', placeholder: 'API Key', value: key, onChange: e => setKey(e.target.value) })
-        ),
-        error && React.createElement('p', { style: { color: 'var(--danger)', marginTop: '10px' } }, error),
-        React.createElement('button', { onClick: handleSetup, disabled: loading }, loading ? 'Verbindung wird hergestellt...' : 'Verbinden')
+        React.createElement('p', { style: { color: 'var(--text-secondary)', marginBottom: '24px' } }, 'Kommunikationsplattform der Kurpfalz-Realschule Schriesheim'),
+        React.createElement('button', {
+          onClick: () => handleConnect(false),
+          disabled: loading,
+          style: { padding: '12px 40px', fontSize: '16px', marginBottom: '12px' }
+        }, loading ? 'Verbindung wird hergestellt...' : 'Anmelden'),
+        React.createElement('button', {
+          onClick: () => handleConnect(true),
+          disabled: loading,
+          style: { padding: '8px 24px', fontSize: '13px', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }
+        }, 'Demo-Modus'),
+        error && React.createElement('p', { style: { color: 'var(--danger)', marginTop: '10px', fontSize: '13px' } }, error)
       );
     }
 
-    function UserSelection({ users, onUserSelected }) {
+    function UserSelection({ users, onUserSelected, loading }) {
       return React.createElement('div', { className: 'setup-screen' },
         React.createElement('h1', null, 'Wer bist du?'),
-        React.createElement('div', { className: 'user-grid' },
-          users.map(user =>
-            React.createElement('button', { key: user.id, className: 'user-btn', onClick: () => onUserSelected(user) },
-              React.createElement(Avatar, { user, size: 48 }),
-              React.createElement('div', { className: 'user-btn-name' }, user.display_name)
+        loading
+          ? React.createElement('p', { style: { color: 'var(--text-muted)' } }, 'Lade Benutzer...')
+          : React.createElement('div', { className: 'user-grid' },
+              users.map(user =>
+                React.createElement('button', { key: user.id, className: 'user-btn', onClick: () => onUserSelected(user) },
+                  React.createElement(Avatar, { user, size: 48 }),
+                  React.createElement('div', { className: 'user-btn-name' }, user.display_name)
+                )
+              )
             )
-          )
-        )
       );
     }
 
-    function PostList({ posts, dataService, user, onOpenThread }) {
+    function PostList({ posts, setPosts, channelId, dataService, user, onOpenThread }) {
       const [newPostTitle, setNewPostTitle] = useState('');
       const [newPostContent, setNewPostContent] = useState('');
       const [saving, setSaving] = useState(false);
+      const [postError, setPostError] = useState('');
 
       const handleCreatePost = async (e) => {
         e.preventDefault();
         if (!newPostContent.trim()) return;
         setSaving(true);
-        const channelId = posts[0]?.channel_id || 1;
-        await dataService.createPost(channelId, user.id, newPostContent, newPostTitle || undefined);
-        setNewPostTitle('');
-        setNewPostContent('');
+        setPostError('');
+        try {
+          const newPost = await dataService.createPost(channelId, user.id, newPostContent, newPostTitle || undefined);
+          if (newPost) {
+            // Sofort in die Liste einfügen (optimistic update)
+            setPosts(prev => [newPost, ...prev]);
+            setNewPostTitle('');
+            setNewPostContent('');
+          } else {
+            setPostError('Post konnte nicht erstellt werden.');
+          }
+        } catch (err) {
+          setPostError('Fehler: ' + err.message);
+        }
         setSaving(false);
       };
 
@@ -1251,27 +1298,32 @@
           React.createElement('textarea', { placeholder: 'Nachricht schreiben...', value: newPostContent, onChange: e => setNewPostContent(e.target.value), style: { display: 'block', width: '100%', padding: '10px', marginBottom: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px', minHeight: '80px', fontFamily: 'inherit', fontWeight: 'inherit' } }),
           React.createElement('button', { type: 'submit', disabled: saving, style: { padding: '8px 16px', background: saving ? 'var(--text-muted)' : 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius)', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '14px' } }, saving ? 'Wird gesendet...' : 'Posten')
         ),
-        posts.map(post =>
-          React.createElement('div', { key: post.id, className: 'post' },
+        postError && React.createElement('p', { style: { color: 'var(--danger)', fontSize: '13px', margin: '0 0 12px' } }, postError),
+        posts.map(post => {
+          const author = post.author || { display_name: 'Unbekannt', avatar_color: '#999' };
+          const replyCount = post.replies ?? post.reply_count ?? 0;
+          return React.createElement('div', { key: post.id, className: 'post' },
             React.createElement('div', { className: 'post-header' },
-              React.createElement(Avatar, { user: post.author, size: 36 }),
+              React.createElement(Avatar, { user: author, size: 36 }),
               React.createElement('div', null,
-                React.createElement('div', { className: 'post-author' }, post.author.display_name),
-                React.createElement('div', { className: 'post-time' }, post.created_at)
+                React.createElement('div', { className: 'post-author' }, author.display_name),
+                React.createElement('div', { className: 'post-time' }, formatDate(post.created_at))
               )
             ),
             post.title && React.createElement('div', { className: 'post-title' }, post.title),
-            React.createElement('div', { className: 'post-content', dangerouslySetInnerHTML: { __html: post.content } }),
+            React.createElement('div', { className: 'post-content' },
+              React.createElement('p', null, post.content)
+            ),
             post.reactions && post.reactions.length > 0 && React.createElement('div', { className: 'post-reactions' },
               post.reactions.map(r =>
                 React.createElement('div', { key: r.emoji, className: 'reaction' }, r.emoji + ' ' + r.count)
               )
             ),
             React.createElement('div', { className: 'post-footer' },
-              React.createElement('button', { onClick: () => onOpenThread(post) }, '💬 Antworten (' + post.replies + ')')
+              React.createElement('button', { onClick: () => onOpenThread(post) }, '💬 Antworten (' + replyCount + ')')
             )
-          )
-        )
+          );
+        })
       );
     }
 
@@ -1299,20 +1351,21 @@
               React.createElement('div', { className: 'post-header' },
                 React.createElement(Avatar, { user: post.author, size: 36 }),
                 React.createElement('div', null,
-                  React.createElement('div', { className: 'post-author' }, post.author.display_name),
-                  React.createElement('div', { className: 'post-time' }, post.created_at)
+                  React.createElement('div', { className: 'post-author' }, (post.author || {}).display_name || 'Unbekannt'),
+                  React.createElement('div', { className: 'post-time' }, formatDate(post.created_at))
                 )
               ),
               post.title && React.createElement('div', { className: 'post-title' }, post.title),
-              React.createElement('div', { className: 'post-content', dangerouslySetInnerHTML: { __html: post.content } })
+              React.createElement('div', { className: 'post-content' }, React.createElement('p', null, post.content))
             ),
-            replies.map(reply =>
-              React.createElement('div', { key: reply.id, className: 'thread-reply' },
-                React.createElement('div', { className: 'thread-reply-author' }, reply.author.display_name),
-                React.createElement('div', { className: 'thread-reply-time' }, reply.created_at),
+            replies.map(reply => {
+              const replyAuthor = reply.author || { display_name: 'Unbekannt' };
+              return React.createElement('div', { key: reply.id, className: 'thread-reply' },
+                React.createElement('div', { className: 'thread-reply-author' }, replyAuthor.display_name),
+                React.createElement('div', { className: 'thread-reply-time' }, formatDate(reply.created_at)),
                 React.createElement('div', { className: 'thread-reply-content' }, reply.content)
-              )
-            )
+              );
+            })
           ),
           React.createElement('div', { className: 'thread-footer' },
             React.createElement('form', { onSubmit: handleSendReply, style: { display: 'flex', gap: '8px', width: '100%' } },
@@ -1478,11 +1531,23 @@
       const [chatMessages, setChatMessages] = useState([]);
       const [allUsers, setAllUsers] = useState([]);
 
+      const [loadingUsers, setLoadingUsers] = useState(false);
+
       const dataService = useMemo(() => new DataService(isDemo ? null : supabaseClient), [supabaseClient, isDemo]);
 
-      const handleSetupComplete = ({ isDemo: demoMode, client }) => {
+      const handleSetupComplete = async ({ isDemo: demoMode, client }) => {
         setIsDemo(demoMode);
         if (client) setSupabaseClient(client);
+        // User-Liste sofort laden
+        setLoadingUsers(true);
+        try {
+          const ds = new DataService(demoMode ? null : client);
+          const usersData = await ds.getUsers();
+          setAllUsers(usersData.length > 0 ? usersData : MOCK_USERS);
+        } catch (e) {
+          setAllUsers(MOCK_USERS);
+        }
+        setLoadingUsers(false);
         setSetupComplete(true);
       };
 
@@ -1517,7 +1582,11 @@
           };
           loadPosts();
           const unsub = dataService.subscribeToChannel(selectedChannel.id, newPost => {
-            if (!cancelled) setPosts(prev => [newPost, ...prev]);
+            if (!cancelled) setPosts(prev => {
+              // Duplikat-Prävention (optimistic update + Realtime)
+              if (prev.some(p => p.id === newPost.id)) return prev;
+              return [newPost, ...prev];
+            });
           });
           return () => { cancelled = true; unsub(); };
         }
@@ -1546,7 +1615,10 @@
           };
           loadMessages();
           const unsub = dataService.subscribeToConversation(selectedConversation.id, newMsg => {
-            if (!cancelled) setChatMessages(prev => [...prev, newMsg]);
+            if (!cancelled) setChatMessages(prev => {
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
           });
           return () => { cancelled = true; unsub(); };
         }
@@ -1600,7 +1672,7 @@
       }
 
       if (!user) {
-        return React.createElement(UserSelection, { users: MOCK_USERS, onUserSelected: handleUserSelected });
+        return React.createElement(UserSelection, { users: allUsers.length > 0 ? allUsers : MOCK_USERS, onUserSelected: handleUserSelected, loading: loadingUsers });
       }
 
       // === TEAMS VIEW ===
@@ -1649,7 +1721,7 @@
               React.createElement('h1', null, '# ' + selectedChannel.name)
             ),
             React.createElement('div', { className: 'content-body' },
-              React.createElement(PostList, { posts, dataService, user, onOpenThread: setOpenThread })
+              React.createElement(PostList, { posts, setPosts, channelId: selectedChannel?.id, dataService, user, onOpenThread: setOpenThread })
             )
           )
         )
