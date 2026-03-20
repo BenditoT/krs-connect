@@ -1181,9 +1181,9 @@
         try {
           const { createClient } = window.supabase;
           const client = createClient(url, key);
-          const { data } = await client.auth.getSession();
-          if (!data.session) {
-            setError('Supabase Credentials ungültig');
+          const { data, error: dbError } = await client.from('users').select('id').limit(1);
+          if (dbError) {
+            setError('Supabase Credentials ungültig: ' + dbError.message);
             setLoading(false);
             return;
           }
