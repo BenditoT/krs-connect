@@ -713,6 +713,40 @@
     .online-panel-user { display: flex; align-items: center; gap: 8px; padding: 6px 14px; font-size: 13px; color: var(--text-primary); }
     .online-panel-user .avatar { width: 28px; height: 28px; font-size: 11px; }
 
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 300; }
+    .modal { background: var(--bg-secondary); border-radius: var(--radius-lg); box-shadow: 0 8px 30px rgba(0,0,0,0.15); width: 420px; max-width: 90vw; max-height: 80vh; overflow-y: auto; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .modal-header h3 { margin: 0; font-size: 16px; }
+    .modal-body { padding: 16px 20px; }
+    .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+    .form-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-primary); color: var(--text-primary); font-size: 14px; box-sizing: border-box; }
+    .form-input:focus { outline: none; border-color: var(--accent); }
+    .color-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+    .color-swatch { width: 32px; height: 32px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: all var(--transition); }
+    .color-swatch.selected { border-color: var(--text-primary); transform: scale(1.1); }
+    .color-swatch:hover { transform: scale(1.1); }
+    .member-list { max-height: 200px; overflow-y: auto; }
+    .member-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+    .member-item .avatar { width: 32px; height: 32px; font-size: 12px; }
+    .member-name { flex: 1; font-size: 14px; }
+    .member-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; font-size: 16px; }
+    .member-remove:hover { color: var(--danger); background: rgba(239,68,68,0.1); }
+    .member-add-btn { background: var(--accent-light); color: var(--accent); border: none; padding: 4px 10px; border-radius: var(--radius); cursor: pointer; font-size: 12px; font-weight: 600; }
+    .member-add-btn:hover { background: var(--accent); color: white; }
+    .btn-primary { padding: 8px 20px; background: var(--accent); color: white; border: none; border-radius: var(--radius); cursor: pointer; font-size: 14px; font-weight: 500; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { background: var(--text-muted); cursor: not-allowed; }
+    .btn-secondary { padding: 8px 20px; background: var(--bg-tertiary); color: var(--text-primary); border: none; border-radius: var(--radius); cursor: pointer; font-size: 14px; }
+    .btn-secondary:hover { background: var(--bg-hover); }
+    .checkbox-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; }
+    .checkbox-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .group-avatar { width: 40px; height: 40px; border-radius: var(--radius); background: var(--accent-light); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; flex-shrink: 0; }
+    .settings-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; }
+    .settings-btn:hover { color: var(--accent); background: var(--accent-light); }
+
     .chat-panel { display: flex; flex-direction: column; height: 100%; }
     .chat-header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
     .chat-header-name { font-weight: 600; font-size: 16px; }
@@ -754,6 +788,7 @@
       .sidebar { width: 100%; height: 60px; flex-direction: row; padding: 0 16px; gap: 16px; }
       .sidebar-nav { flex-direction: row; flex: 1; }
       .sidebar-bottom { flex-direction: row; }
+      .modal { width: 95vw; max-height: 90vh; }
     }
   </style>
 </head>
@@ -920,6 +955,8 @@
       '💙':'blaues herz blue heart','💜':'lila herz purple heart',
     };
 
+    const TEAM_COLORS = ['#7c6ff7', '#ec4899', '#3b82f6', '#f97316', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#a855f7'];
+
     const EMOJI_DATA = {
       'Häufig': ['👍', '❤️', '😂', '🎉', '👏', '🔥', '✅', '💪', '🙏', '😊', '👀', '💡', '📝', '🎵', '⭐'],
       'Smileys': ['😀', '😃', '😄', '😁', '😅', '🤣', '😊', '😇', '🙂', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😜', '🤪', '😝', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶'],
@@ -1077,14 +1114,20 @@
           // 4. Reichere Konversationen an
           return convs.map(conv => {
             const members = (allMembers || []).filter(m => m.conversation_id === conv.id);
-            const otherMember = members.find(m => m.user_id !== userId);
             const lastMsg = (lastMsgs || []).find(m => m.conversation_id === conv.id);
-            return {
+            const convObj = {
               ...conv,
-              user: otherMember?.users || { display_name: 'Unbekannt', avatar_color: '#999' },
               lastMessage: lastMsg?.content || '',
               time: lastMsg ? formatDate(lastMsg.created_at) : ''
             };
+            if (conv.is_group) {
+              convObj.members = members.map(m => m.user_id);
+              convObj.name = conv.name || 'Gruppenchat';
+            } else {
+              const otherMember = members.find(m => m.user_id !== userId);
+              convObj.user = otherMember?.users || { display_name: 'Unbekannt', avatar_color: '#999' };
+            }
+            return convObj;
           });
         } catch (err) {
           console.error('getConversations error:', err);
@@ -1269,6 +1312,83 @@
         };
       }
 
+      async createTeam(name, description, iconText, iconColor, creatorId) {
+        if (this.isDemo) {
+          const newTeam = { id: 'team-' + Date.now(), name, description, icon_text: iconText, icon_color: iconColor, category: 'Teams', members: 1 };
+          MOCK_TEAMS.push(newTeam);
+          MOCK_CHANNELS[newTeam.id] = [{ id: 'ch-' + Date.now(), name: 'Allgemein', is_default: true, unread: 0, team_id: newTeam.id }];
+          return newTeam;
+        }
+        try {
+          const { data: team, error: teamErr } = await this.sb.from('teams').insert({ name, description, icon_text: iconText, icon_color: iconColor, category: 'Teams' }).select().single();
+          if (teamErr) throw teamErr;
+          const { error: memberErr } = await this.sb.from('team_members').insert({ team_id: team.id, user_id: creatorId, role: 'admin' });
+          if (memberErr) throw memberErr;
+          const { data: defaultChannel, error: chanErr } = await this.sb.from('channels').insert({ team_id: team.id, name: 'Allgemein', is_default: true }).select().single();
+          if (chanErr) throw chanErr;
+          return team;
+        } catch (err) {
+          console.error('createTeam error:', err);
+          return null;
+        }
+      }
+
+      async getTeamMembers(teamId) {
+        if (this.isDemo) {
+          return MOCK_USERS.slice(0, 3).map(u => ({ ...u, role: 'member' }));
+        }
+        try {
+          const { data, error } = await this.sb.from('team_members').select('user_id, role, users(*)').eq('team_id', teamId);
+          if (error) throw error;
+          return data?.map(tm => ({ ...tm.users, role: tm.role })) || [];
+        } catch (err) {
+          console.error('getTeamMembers error:', err);
+          return [];
+        }
+      }
+
+      async addTeamMember(teamId, userId) {
+        if (this.isDemo) return true;
+        try {
+          const { error } = await this.sb.from('team_members').insert({ team_id: teamId, user_id: userId, role: 'member' });
+          if (error) throw error;
+          return true;
+        } catch (err) {
+          console.error('addTeamMember error:', err);
+          return false;
+        }
+      }
+
+      async removeTeamMember(teamId, userId) {
+        if (this.isDemo) return true;
+        try {
+          const { error } = await this.sb.from('team_members').delete().eq('team_id', teamId).eq('user_id', userId);
+          if (error) throw error;
+          return true;
+        } catch (err) {
+          console.error('removeTeamMember error:', err);
+          return false;
+        }
+      }
+
+      async createGroupConversation(name, memberIds) {
+        if (this.isDemo) {
+          const convId = 'group-' + Date.now();
+          return { id: convId, is_group: true, name, members: memberIds };
+        }
+        try {
+          const { data: conv, error: convErr } = await this.sb.from('conversations').insert({ is_group: true, name }).select().single();
+          if (convErr) throw convErr;
+          const memberRows = memberIds.map(id => ({ conversation_id: conv.id, user_id: id }));
+          const { error: memErr } = await this.sb.from('conversation_members').insert(memberRows);
+          if (memErr) throw memErr;
+          return conv;
+        } catch (err) {
+          console.error('createGroupConversation error:', err);
+          return null;
+        }
+      }
+
       cleanup() {
         this.subscriptions.forEach(s => {
           try { s.unsubscribe(); } catch (e) { }
@@ -1293,6 +1413,8 @@
       search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
       image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
       users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+      settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
+      userPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>',
     };
 
     // ============================================================
@@ -1572,17 +1694,242 @@
       );
     }
 
+    function CreateTeamModal({ onClose, onCreate, defaultColor = TEAM_COLORS[0] }) {
+      const [name, setName] = useState('');
+      const [description, setDescription] = useState('');
+      const [iconText, setIconText] = useState('');
+      const [iconColor, setIconColor] = useState(defaultColor);
+      const [saving, setSaving] = useState(false);
+      const [error, setError] = useState('');
+
+      const handleNameChange = (e) => {
+        const val = e.target.value;
+        setName(val);
+        if (!iconText) setIconText(val.substring(0, 2).toUpperCase());
+      };
+
+      const handleCreate = async (e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setError('');
+        setSaving(true);
+        try {
+          await onCreate(name, description, iconText || name.substring(0, 2).toUpperCase(), iconColor);
+        } catch (err) {
+          setError(err.message || 'Fehler beim Erstellen des Teams');
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      return React.createElement('div', { className: 'modal-overlay', onClick: onClose },
+        React.createElement('div', { className: 'modal', onClick: e => e.stopPropagation() },
+          React.createElement('div', { className: 'modal-header' },
+            React.createElement('h3', null, 'Team erstellen')
+          ),
+          React.createElement('form', { onSubmit: handleCreate, className: 'modal-body' },
+            error && React.createElement('div', { style: { background: 'var(--danger-light, #fee)', color: 'var(--danger, #c33)', padding: '10px 12px', borderRadius: 'var(--radius)', marginBottom: '15px', fontSize: '13px' } }, error),
+            React.createElement('div', { className: 'form-group' },
+              React.createElement('label', { className: 'form-label' }, 'Team-Name'),
+              React.createElement('input', {
+                type: 'text',
+                className: 'form-input',
+                placeholder: 'z.B. Musik Fachschaft',
+                value: name,
+                onChange: handleNameChange,
+                autoFocus: true
+              })
+            ),
+            React.createElement('div', { className: 'form-group' },
+              React.createElement('label', { className: 'form-label' }, 'Beschreibung (optional)'),
+              React.createElement('input', {
+                type: 'text',
+                className: 'form-input',
+                placeholder: 'Kurze Beschreibung...',
+                value: description,
+                onChange: e => setDescription(e.target.value)
+              })
+            ),
+            React.createElement('div', { className: 'form-group' },
+              React.createElement('label', { className: 'form-label' }, 'Icon (2 Zeichen)'),
+              React.createElement('input', {
+                type: 'text',
+                className: 'form-input',
+                placeholder: 'z.B. MU',
+                value: iconText,
+                onChange: e => setIconText(e.target.value.substring(0, 2).toUpperCase()),
+                maxLength: 2
+              })
+            ),
+            React.createElement('div', { className: 'form-group' },
+              React.createElement('label', { className: 'form-label' }, 'Icon-Farbe'),
+              React.createElement('div', { className: 'color-picker' },
+                TEAM_COLORS.map(color =>
+                  React.createElement('button', {
+                    key: color,
+                    type: 'button',
+                    className: 'color-swatch' + (iconColor === color ? ' selected' : ''),
+                    style: { background: color },
+                    onClick: () => setIconColor(color)
+                  })
+                )
+              )
+            )
+          ),
+          React.createElement('div', { className: 'modal-footer' },
+            React.createElement('button', { type: 'button', className: 'btn-secondary', onClick: onClose }, 'Abbrechen'),
+            React.createElement('button', { type: 'submit', className: 'btn-primary', disabled: saving || !name.trim() }, saving ? 'Wird erstellt...' : 'Erstellen')
+          )
+        )
+      );
+    }
+
+    function TeamMembersModal({ teamId, dataService, onClose, onMembersUpdated, currentUser }) {
+      const [members, setMembers] = useState([]);
+      const [availableUsers, setAvailableUsers] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [allUsers, setAllUsers] = useState([]);
+      const [searchTerm, setSearchTerm] = useState('');
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        const loadData = async () => {
+          const tmembers = await dataService.getTeamMembers(teamId);
+          setMembers(tmembers);
+          const users = await dataService.getUsers();
+          setAllUsers(users);
+          const memberIds = new Set(tmembers.map(m => m.id));
+          setAvailableUsers(users.filter(u => !memberIds.has(u.id) && u.id !== currentUser.id));
+          setLoading(false);
+        };
+        loadData();
+      }, [teamId, dataService, currentUser]);
+
+      const filteredUsers = availableUsers.filter(u =>
+        u.display_name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+      const handleRemove = async (userId) => {
+        try {
+          const result = await dataService.removeTeamMember(teamId, userId);
+          if (result) {
+            setMembers(prev => prev.filter(m => m.id !== userId));
+            const userToAdd = allUsers.find(u => u.id === userId);
+            if (userToAdd) {
+              setAvailableUsers(prev => [...prev, userToAdd]);
+            }
+            setError('');
+            if (onMembersUpdated) onMembersUpdated();
+          }
+        } catch (err) {
+          setError(err.message || 'Fehler beim Entfernen des Mitglieds');
+        }
+      };
+
+      const handleAdd = async (userId) => {
+        try {
+          const result = await dataService.addTeamMember(teamId, userId);
+          if (result) {
+            const user = availableUsers.find(u => u.id === userId);
+            setMembers(prev => [...prev, user]);
+            setAvailableUsers(prev => prev.filter(u => u.id !== userId));
+            setError('');
+            if (onMembersUpdated) onMembersUpdated();
+          }
+        } catch (err) {
+          setError(err.message || 'Fehler beim Hinzufügen des Mitglieds');
+        }
+      };
+
+      return React.createElement('div', { className: 'modal-overlay', onClick: onClose },
+        React.createElement('div', { className: 'modal', onClick: e => e.stopPropagation(), style: { width: '480px' } },
+          React.createElement('div', { className: 'modal-header' },
+            React.createElement('h3', null, 'Mitgliederverwaltung')
+          ),
+          React.createElement('div', { className: 'modal-body' },
+            error && React.createElement('div', { style: { background: 'var(--danger-light, #fee)', color: 'var(--danger, #c33)', padding: '10px 12px', borderRadius: 'var(--radius)', marginBottom: '15px', fontSize: '13px' } }, error),
+            React.createElement('div', { style: { marginBottom: '20px' } },
+              React.createElement('h4', { style: { fontSize: '14px', fontWeight: '600', marginBottom: '10px' } }, 'Aktuelle Mitglieder'),
+              React.createElement('div', { className: 'member-list' },
+                loading ? 'Lade Mitglieder...' : (
+                  members.length > 0 ? members.map(member =>
+                    React.createElement('div', { key: member.id, className: 'member-item' },
+                      React.createElement(Avatar, { user: member, size: 32 }),
+                      React.createElement('div', { className: 'member-name' }, member.display_name),
+                      member.id !== currentUser.id && React.createElement('button', {
+                        type: 'button',
+                        className: 'member-remove',
+                        onClick: () => handleRemove(member.id),
+                        title: 'Entfernen'
+                      }, '✕')
+                    )
+                  ) : 'Keine Mitglieder'
+                )
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('h4', { style: { fontSize: '14px', fontWeight: '600', marginBottom: '10px' } }, 'Mitglied hinzufügen'),
+              React.createElement('input', {
+                type: 'text',
+                className: 'form-input',
+                placeholder: 'Benutzer suchen...',
+                value: searchTerm,
+                onChange: e => setSearchTerm(e.target.value),
+                style: { marginBottom: '10px' }
+              }),
+              React.createElement('div', { className: 'member-list' },
+                filteredUsers.length > 0 ? filteredUsers.map(user =>
+                  React.createElement('div', { key: user.id, className: 'member-item' },
+                    React.createElement(Avatar, { user, size: 32 }),
+                    React.createElement('div', { className: 'member-name' }, user.display_name),
+                    React.createElement('button', {
+                      type: 'button',
+                      className: 'member-add-btn',
+                      onClick: () => handleAdd(user.id)
+                    }, 'Hinzufügen')
+                  )
+                ) : 'Keine weiteren Benutzer verfügbar'
+              )
+            )
+          ),
+          React.createElement('div', { className: 'modal-footer' },
+            React.createElement('button', { type: 'button', className: 'btn-secondary', onClick: onClose }, 'Schließen')
+          )
+        )
+      );
+    }
+
     // ============================================================
     // CHAT COMPONENTS
     // ============================================================
 
-    function ConversationList({ conversations, currentUser, selectedId, onSelect, onNewChat, allUsers, onlineUsers }) {
+    function ConversationList({ conversations, currentUser, selectedId, onSelect, onNewChat, allUsers, onlineUsers, onGroupChat }) {
       const [showNewChat, setShowNewChat] = useState(false);
+      const [showGroupChat, setShowGroupChat] = useState(false);
       const [chatSearch, setChatSearch] = useState('');
+      const [groupName, setGroupName] = useState('');
+      const [selectedMembers, setSelectedMembers] = useState(new Set());
 
       const filteredUsers = allUsers
         .filter(u => u.id !== currentUser.id)
         .filter(u => !chatSearch || u.display_name.toLowerCase().includes(chatSearch.toLowerCase()));
+
+      const handleCreateGroup = async (e) => {
+        e.preventDefault();
+        if (!groupName.trim() || selectedMembers.size === 0) return;
+        const memberArray = Array.from(selectedMembers).map(id => Number(id));
+        await onGroupChat(groupName, memberArray);
+        setGroupName('');
+        setSelectedMembers(new Set());
+        setShowGroupChat(false);
+      };
+
+      const toggleMember = (userId) => {
+        const newSet = new Set(selectedMembers);
+        if (newSet.has(userId)) newSet.delete(userId);
+        else newSet.add(userId);
+        setSelectedMembers(newSet);
+      };
 
       return React.createElement('div', { className: 'conversation-list' },
         React.createElement('div', { className: 'conversation-header' },
@@ -1596,6 +1943,12 @@
         ),
         showNewChat && React.createElement('div', { className: 'new-chat-picker' },
           [
+            React.createElement('button', {
+              key: 'group-btn',
+              type: 'button',
+              style: { width: '100%', padding: '10px', background: 'var(--accent-light)', color: 'var(--accent)', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', fontSize: '13px', fontWeight: '600', marginBottom: '10px' },
+              onClick: () => setShowGroupChat(true)
+            }, '+ Neuer Gruppenchat'),
             React.createElement('input', {
               key: 'search-input',
               type: 'text',
@@ -1617,6 +1970,46 @@
               ))
           ]
         ),
+        showGroupChat && React.createElement('div', { className: 'modal-overlay', onClick: () => setShowGroupChat(false) },
+          React.createElement('div', { className: 'modal', onClick: e => e.stopPropagation() },
+            React.createElement('div', { className: 'modal-header' },
+              React.createElement('h3', null, 'Neuer Gruppenchat')
+            ),
+            React.createElement('form', { onSubmit: handleCreateGroup, className: 'modal-body' },
+              React.createElement('div', { className: 'form-group' },
+                React.createElement('label', { className: 'form-label' }, 'Gruppennamen'),
+                React.createElement('input', {
+                  type: 'text',
+                  className: 'form-input',
+                  placeholder: 'z.B. Projektteam',
+                  value: groupName,
+                  onChange: e => setGroupName(e.target.value),
+                  autoFocus: true
+                })
+              ),
+              React.createElement('div', { className: 'form-group' },
+                React.createElement('label', { className: 'form-label' }, 'Mitglieder auswählen'),
+                React.createElement('div', { style: { maxHeight: '200px', overflowY: 'auto' } },
+                  allUsers.filter(u => u.id !== currentUser.id).map(user =>
+                    React.createElement('label', { key: user.id, className: 'checkbox-item' },
+                      React.createElement('input', {
+                        type: 'checkbox',
+                        checked: selectedMembers.has(user.id),
+                        onChange: () => toggleMember(user.id)
+                      }),
+                      React.createElement(Avatar, { user, size: 24 }),
+                      React.createElement('span', null, user.display_name)
+                    )
+                  )
+                )
+              )
+            ),
+            React.createElement('div', { className: 'modal-footer' },
+              React.createElement('button', { type: 'button', className: 'btn-secondary', onClick: () => setShowGroupChat(false) }, 'Abbrechen'),
+              React.createElement('button', { type: 'submit', className: 'btn-primary', disabled: !groupName.trim() || selectedMembers.size === 0 }, 'Erstellen')
+            )
+          )
+        ),
         React.createElement('div', { className: 'conversation-items' },
           conversations.map(conv =>
             React.createElement('button', {
@@ -1624,12 +2017,12 @@
               className: 'conversation-item' + (selectedId === conv.id ? ' active' : ''),
               onClick: () => onSelect(conv)
             },
-              React.createElement('div', { className: 'avatar-wrapper' },
+              conv.is_group ? React.createElement('div', { className: 'group-avatar', style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '8px', background: 'var(--accent)', color: 'white', fontWeight: '600', fontSize: '18px' } }, '👥') : React.createElement('div', { className: 'avatar-wrapper' },
                 React.createElement(Avatar, { user: conv.user || { display_name: '?', avatar_color: '#999' }, size: 40 }),
                 React.createElement('span', { className: 'avatar-status online-dot small' + (onlineUsers && onlineUsers.has(Number(conv.user?.id)) ? '' : ' offline') })
               ),
               React.createElement('div', { className: 'conversation-info' },
-                React.createElement('div', { className: 'conversation-name' }, (conv.user || {}).display_name || 'Unbekannt'),
+                React.createElement('div', { className: 'conversation-name' }, conv.is_group ? (conv.name || 'Gruppenchat') : ((conv.user || {}).display_name || 'Unbekannt')),
                 React.createElement('div', { className: 'conversation-preview' }, conv.lastMessage || '')
               ),
               React.createElement('div', { className: 'conversation-meta' },
@@ -1708,16 +2101,23 @@
         );
       }
 
+      const isGroupChat = conversation.is_group;
+
       return React.createElement('div', { className: 'chat-panel' },
         React.createElement('div', { className: 'chat-header' },
           onBack && React.createElement('button', { className: 'back-btn', onClick: onBack, dangerouslySetInnerHTML: { __html: Icons.back } }),
-          React.createElement('div', { className: 'avatar-wrapper' },
-            React.createElement(Avatar, { user: conversation.user || { display_name: 'Chat', avatar_color: '#999' }, size: 32 }),
-            React.createElement('span', { className: 'avatar-status online-dot small' + (onlineUsers && onlineUsers.has(Number(conversation.user?.id)) ? '' : ' offline') })
-          ),
-          React.createElement('div', null,
-            React.createElement('span', { className: 'chat-header-name' }, (conversation.user || {}).display_name || 'Chat'),
-            onlineUsers && onlineUsers.has(Number(conversation.user?.id)) && React.createElement('div', { style: { fontSize: '11px', color: 'var(--success)', fontWeight: '500' } }, 'Online')
+          isGroupChat ? React.createElement('div', null,
+            React.createElement('span', { className: 'chat-header-name' }, conversation.name || 'Gruppenchat'),
+            React.createElement('div', { style: { fontSize: '11px', color: 'var(--text-muted)', fontWeight: '500' } }, (conversation.members?.length || 0) + ' Mitglieder')
+          ) : React.createElement(React.Fragment, null,
+            React.createElement('div', { className: 'avatar-wrapper' },
+              React.createElement(Avatar, { user: conversation.user || { display_name: 'Chat', avatar_color: '#999' }, size: 32 }),
+              React.createElement('span', { className: 'avatar-status online-dot small' + (onlineUsers && onlineUsers.has(Number(conversation.user?.id)) ? '' : ' offline') })
+            ),
+            React.createElement('div', null,
+              React.createElement('span', { className: 'chat-header-name' }, (conversation.user || {}).display_name || 'Chat'),
+              onlineUsers && onlineUsers.has(Number(conversation.user?.id)) && React.createElement('div', { style: { fontSize: '11px', color: 'var(--success)', fontWeight: '500' } }, 'Online')
+            )
           )
         ),
         React.createElement('div', { className: 'chat-messages' },
@@ -1880,6 +2280,10 @@
       const [showOnlinePanel, setShowOnlinePanel] = useState(false);
 
       const [loadingUsers, setLoadingUsers] = useState(false);
+
+      // Team management modals
+      const [showCreateTeam, setShowCreateTeam] = useState(false);
+      const [showTeamMembers, setShowTeamMembers] = useState(false);
 
       const dataService = useMemo(() => new DataService(isDemo ? null : supabaseClient), [supabaseClient, isDemo]);
 
@@ -2081,6 +2485,43 @@
         }
       };
 
+      const handleGroupChat = async (groupName, memberIds) => {
+        // Create group conversation with current user + selected members
+        const allMemberIds = [user.id, ...memberIds];
+        const conv = await dataService.createGroupConversation(groupName, allMemberIds);
+        if (conv) {
+          const newConv = {
+            id: conv.id,
+            is_group: true,
+            name: groupName,
+            members: allMemberIds,
+            lastMessage: '',
+            time: 'Jetzt',
+            unread: 0
+          };
+          setConversations(prev => {
+            if (prev.some(c => c.id === newConv.id)) return prev;
+            return [newConv, ...prev];
+          });
+          setSelectedConversation(newConv);
+        }
+      };
+
+      const handleCreateTeam = async (name, description, iconText, iconColor) => {
+        const newTeam = await dataService.createTeam(name, description, iconText, iconColor, user.id);
+        if (newTeam) {
+          setTeams(prev => [newTeam, ...prev]);
+          setSelectedTeam(newTeam);
+          setShowCreateTeam(false);
+          // Load default channel
+          const chans = await dataService.getChannels(newTeam.id);
+          setChannels(chans);
+          if (chans.length > 0) {
+            setSelectedChannel(chans[0]);
+          }
+        }
+      };
+
       const handleLogout = () => {
         dataService.cleanup();
         setSetupComplete(false);
@@ -2109,8 +2550,15 @@
       // === TEAMS VIEW ===
       const teamsView = React.createElement(React.Fragment, null,
         React.createElement('div', { className: 'sidebar-content' },
-          React.createElement('div', { className: 'sidebar-header' },
-            React.createElement('h2', null, 'Teams')
+          React.createElement('div', { className: 'sidebar-header', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+            React.createElement('h2', null, 'Teams'),
+            React.createElement('button', {
+              style: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '4px', display: 'flex', alignItems: 'center' },
+              onClick: () => setShowCreateTeam(true),
+              title: 'Neues Team'
+            },
+              React.createElement('span', { dangerouslySetInnerHTML: { __html: Icons.plus }, style: { fontSize: '18px' } })
+            )
           ),
           React.createElement('div', { className: 'sidebar-list' },
             teams.map(team =>
@@ -2150,8 +2598,15 @@
         ),
         React.createElement('div', { className: 'content' },
           selectedChannel && React.createElement(React.Fragment, null,
-            React.createElement('div', { className: 'content-header' },
-              React.createElement('h1', null, '# ' + selectedChannel.name)
+            React.createElement('div', { className: 'content-header', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+              React.createElement('h1', null, '# ' + selectedChannel.name),
+              selectedTeam && React.createElement('button', {
+                style: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '8px', display: 'flex', alignItems: 'center' },
+                onClick: () => setShowTeamMembers(true),
+                title: 'Mitgliederverwaltung'
+              },
+                React.createElement('span', { dangerouslySetInnerHTML: { __html: Icons.settings }, style: { fontSize: '20px' } })
+              )
             ),
             React.createElement('div', { className: 'content-body' },
               React.createElement(PostList, { posts, setPosts, channelId: selectedChannel?.id, dataService, user, onOpenThread: setOpenThread })
@@ -2170,7 +2625,8 @@
             onSelect: handleConversationSelect,
             onNewChat: handleNewChat,
             allUsers,
-            onlineUsers
+            onlineUsers,
+            onGroupChat: handleGroupChat
           })
         ),
         React.createElement('div', { className: 'content' },
@@ -2186,7 +2642,21 @@
         )
       );
 
-      return React.createElement('div', { className: 'app-layout' },
+      return React.createElement(React.Fragment, null,
+        // Modals
+        showCreateTeam && React.createElement(CreateTeamModal, {
+          onClose: () => setShowCreateTeam(false),
+          onCreate: handleCreateTeam
+        }),
+        showTeamMembers && selectedTeam && React.createElement(TeamMembersModal, {
+          teamId: selectedTeam.id,
+          dataService,
+          onClose: () => setShowTeamMembers(false),
+          onMembersUpdated: () => {}, // Optional callback
+          currentUser: user
+        }),
+        // Main app layout
+        React.createElement('div', { className: 'app-layout' },
         // Sidebar mit View-Switcher
         React.createElement('div', { className: 'sidebar' },
           React.createElement('div', { className: 'sidebar-logo' }, React.createElement('img', { src: KRS_LOGO, alt: 'KRS', style: { width: '32px', height: '32px', objectFit: 'contain' } })),
@@ -2262,6 +2732,7 @@
         ),
         // Thread overlay (nur in Teams-View)
         view === 'teams' && openThread && React.createElement(ThreadPanel, { post: openThread, replies, dataService, user, onClose: () => setOpenThread(null) })
+      )
       );
     }
 
