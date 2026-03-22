@@ -1021,6 +1021,37 @@
         this.sb = supabaseClient;
         this.isDemo = !supabaseClient;
         this.subscriptions = [];
+
+      async getStorageStats() {
+        if (this.isDemo) return { used: 0, files: 0 };
+        try {
+          const { data } = await this.sb.storage.from('images').list('uploads', { limit: 1000 });
+          if (!data) return { used: 0, files: 0 };
+          const totalSize = data.reduce((sum, f) => sum + (f.metadata?.size || 0), 0);
+          return { used: totalSize, files: data.length, usedMB: Math.round(totalSize / 1024 / 1024) };
+        } catch (err) {
+          return { used: 0, files: 0 };
+        }
+      }
+
+      async cleanupOldFiles(olderThanDays = 90) {
+        if (this.isDemo) return 0;
+        try {
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - olderThanDays);
+          const { data: files } = await this.sb.storage.from('images').list('uploads', { limit: 1000 });
+          if (!files) return 0;
+          const old = files.filter(f => f.created_at && new Date(f.created_at) < cutoff);
+          if (old.length === 0) return 0;
+          const paths = old.map(f => `uploads/${f.name}`);
+          const { error } = await this.sb.storage.from('images').remove(paths);
+          if (error) throw error;
+          return old.length;
+        } catch (err) {
+          console.error('cleanupOldFiles error:', err);
+          return 0;
+        }
+      }
       }
 
       async getUsers() {
@@ -1088,6 +1119,20 @@
           file = await compressImage(file);
         }
         try {
+          // Storage-Quota-Check (Free Tier: 1 GB)
+          try {
+            const { data: storageFiles } = await this.sb.storage.from('images').list('uploads', { limit: 1000 });
+            if (storageFiles) {
+              const totalSize = storageFiles.reduce((sum, f) => sum + (f.metadata?.size || 0), 0);
+              const maxStorage = 900 * 1024 * 1024; // 900 MB Warnschwelle
+              if (totalSize + file.size > maxStorage) {
+                console.warn(`Storage fast voll: ${Math.round(totalSize / 1024 / 1024)} MB von ~1000 MB`);
+                // Nicht blockieren, nur warnen
+              }
+            }
+          } catch (quotaErr) {
+            // Quota-Check fehlgeschlagen — kein Problem, Upload trotzdem versuchen
+          }
           const ext = file.name.split('.').pop() || 'bin';
           const path = `uploads/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
           const { data, error } = await this.sb.storage.from('images').upload(path, file);
@@ -1232,24 +1277,44 @@
       async search(query) {
         if (!query || query.length < 1) return { posts: [], messages: [] };
         if (this.isDemo) {
-          // Demo: durchsuche Mock-Daten
           const q = query.toLowerCase();
           const posts = MOCK_POSTS.Allgemein?.filter(p => (p.content + (p.title || '')).toLowerCase().includes(q)) || [];
           return { posts, messages: [] };
         }
         try {
-          // Posts durchsuchen (Titel + Content)
-          const { data: posts } = await this.sb.from('posts')
-            .select('*, author:users(*), channel:channels(name, team_id)')
-            .or(`content.ilike.%${query}%,title.ilike.%${query}%`)
-            .order('created_at', { ascending: false })
-            .limit(20);
-          // Nachrichten durchsuchen
-          const { data: messages } = await this.sb.from('messages')
-            .select('*, sender:users(*)')
-            .ilike('content', `%${query}%`)
-            .order('created_at', { ascending: false })
-            .limit(20);
+          // Versuche zuerst Full-Text-Search (schneller mit tsvector-Index)
+          let posts, messages;
+          try {
+            const { data: ftsPost } = await this.sb.from('posts')
+              .select('*, author:users(*), channel:channels(name, team_id)')
+              .textSearch('content', query, { type: 'websearch', config: 'german' })
+              .order('created_at', { ascending: false })
+              .limit(20);
+            posts = ftsPost;
+          } catch (ftsErr) {
+            // Fallback zu ilike wenn FTS-Index nicht existiert
+            const { data: ilikePosts } = await this.sb.from('posts')
+              .select('*, author:users(*), channel:channels(name, team_id)')
+              .or(`content.ilike.%${query}%,title.ilike.%${query}%`)
+              .order('created_at', { ascending: false })
+              .limit(20);
+            posts = ilikePosts;
+          }
+          try {
+            const { data: ftsMsgs } = await this.sb.from('messages')
+              .select('*, sender:users(*)')
+              .textSearch('content', query, { type: 'websearch', config: 'german' })
+              .order('created_at', { ascending: false })
+              .limit(20);
+            messages = ftsMsgs;
+          } catch (ftsErr) {
+            const { data: ilikeMsgs } = await this.sb.from('messages')
+              .select('*, sender:users(*)')
+              .ilike('content', `%${query}%`)
+              .order('created_at', { ascending: false })
+              .limit(20);
+            messages = ilikeMsgs;
+          }
           return { posts: posts || [], messages: messages || [] };
         } catch (err) {
           console.error('Search error:', err);
@@ -1288,12 +1353,19 @@
 
       subscribeToChannel(channelId, onNewPost) {
         if (this.isDemo) return () => {};
+        // Smart: Alte Channel-Subscriptions aufräumen (nur den gleichen Channel-Typ)
+        this.subscriptions = this.subscriptions.filter(s => {
+          if (s._krsType === 'channel') {
+            try { s.unsubscribe(); if (this.sb) this.sb.removeChannel(s); } catch(e) {}
+            return false;
+          }
+          return true;
+        });
         try {
           const sub = this.sb.channel('posts-' + channelId)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts', filter: `channel_id=eq.${channelId}` },
               async (payload) => {
                 const post = payload.new;
-                // Author nachladen (Realtime liefert nur author_id, kein JOIN)
                 if (post.author_id && !post.author) {
                   try {
                     const { data: author } = await this.sb.from('users').select('*').eq('id', post.author_id).single();
@@ -1305,8 +1377,12 @@
                 onNewPost(post);
               })
             .subscribe();
+          sub._krsType = 'channel'; // Mark type for smart cleanup
           this.subscriptions.push(sub);
-          return () => sub.unsubscribe();
+          return () => {
+            try { sub.unsubscribe(); if (this.sb) this.sb.removeChannel(sub); } catch(e) {}
+            this.subscriptions = this.subscriptions.filter(s => s !== sub);
+          };
         } catch (err) {
           console.error('subscribeToChannel error:', err);
           return () => {};
@@ -1315,6 +1391,14 @@
 
       subscribeToConversation(conversationId, onNewMessage) {
         if (this.isDemo) return () => {};
+        // Smart: Alte Conversation-Subscriptions aufräumen
+        this.subscriptions = this.subscriptions.filter(s => {
+          if (s._krsType === 'conversation') {
+            try { s.unsubscribe(); if (this.sb) this.sb.removeChannel(s); } catch(e) {}
+            return false;
+          }
+          return true;
+        });
         try {
           const sub = this.sb.channel('messages-' + conversationId)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
@@ -1331,8 +1415,12 @@
                 onNewMessage(msg);
               })
             .subscribe();
+          sub._krsType = 'conversation'; // Mark type for smart cleanup
           this.subscriptions.push(sub);
-          return () => sub.unsubscribe();
+          return () => {
+            try { sub.unsubscribe(); if (this.sb) this.sb.removeChannel(sub); } catch(e) {}
+            this.subscriptions = this.subscriptions.filter(s => s !== sub);
+          };
         } catch (err) {
           console.error('subscribeToConversation error:', err);
           return () => {};
@@ -1465,7 +1553,12 @@
 
       cleanup() {
         this.subscriptions.forEach(s => {
-          try { s.unsubscribe(); } catch (e) { }
+          try {
+            if (s.unsubscribe) s.unsubscribe();
+            if (this.sb && this.sb.removeChannel) this.sb.removeChannel(s);
+          } catch (e) {
+            console.warn('Cleanup error:', e);
+          }
         });
         this.subscriptions = [];
       }
