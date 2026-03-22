@@ -780,6 +780,14 @@
     ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
+    /* Teams visibility */
+    .team-item { position: relative; }
+    .team-hide-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); opacity: 0; background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: opacity 0.15s; }
+    .team-item:hover .team-hide-btn { opacity: 1; }
+    .team-hide-btn:hover { color: var(--danger); }
+    .hidden-teams-toggle { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px; width: 100%; transition: color 0.15s; }
+    .hidden-teams-toggle:hover { color: var(--text-primary); }
+
     /* Responsive */
     @media (max-width: 768px) {
       .sidebar-content { width: 100%; }
@@ -968,6 +976,46 @@
     // ============================================================
     // DATA SERVICE ABSTRACTION LAYER
     // ============================================================
+    async function compressImage(file, maxWidth = 1200, quality = 0.8) {
+      return new Promise((resolve) => {
+        // Skip non-image files or small files (< 200KB)
+        if (!file.type.startsWith('image/') || file.size < 200 * 1024) {
+          resolve(file);
+          return;
+        }
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let { width, height } = img;
+          if (width > maxWidth) {
+            height = Math.round(height * maxWidth / width);
+            width = maxWidth;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            if (blob && blob.size < file.size) {
+              // Compressed is smaller — use it
+              const compressed = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
+              resolve(compressed);
+            } else {
+              // Original was already smaller — keep it
+              resolve(file);
+            }
+          }, 'image/jpeg', quality);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve(file); // Fallback to original
+        };
+        img.src = url;
+      });
+    }
+
     class DataService {
       constructor(supabaseClient = null) {
         this.sb = supabaseClient;
@@ -1023,24 +1071,27 @@
         }
       }
 
-      async uploadImage(file) {
-        if (this.isDemo) {
-          return URL.createObjectURL(file);
+      async uploadFile(file) {
+        if (this.isDemo) return URL.createObjectURL(file);
+        // Compress images before upload
+        if (file.type.startsWith('image/')) {
+          file = await compressImage(file);
         }
         try {
-          const ext = file.name.split('.').pop();
-          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
-          const { data, error } = await this.sb.storage.from('images').upload(fileName, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
+          const ext = file.name.split('.').pop() || 'bin';
+          const path = `uploads/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
+          const { data, error } = await this.sb.storage.from('images').upload(path, file);
           if (error) throw error;
-          const { data: urlData } = this.sb.storage.from('images').getPublicUrl(fileName);
+          const { data: urlData } = this.sb.storage.from('images').getPublicUrl(data.path);
           return urlData.publicUrl;
         } catch (err) {
-          console.error('uploadImage error:', err);
+          console.error('uploadFile error:', err);
           return null;
         }
+      }
+
+      async uploadImage(file) {
+        return this.uploadFile(file);
       }
 
       async createPost(channelId, authorId, content, title = null, imageUrl = null) {
@@ -1555,14 +1606,19 @@
       const [postError, setPostError] = useState('');
       const [selectedImage, setSelectedImage] = useState(null);
       const [imagePreview, setImagePreview] = useState(null);
+      const [showPostForm, setShowPostForm] = useState(false);
       const fileInputRef = useRef(null);
 
       const handleImageSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
-          if (file.size > 5 * 1024 * 1024) { setPostError('Bild zu groß (max. 5 MB)'); return; }
+          if (file.size > 20 * 1024 * 1024) { setPostError('Datei zu groß (max. 20 MB)'); return; }
           setSelectedImage(file);
-          setImagePreview(URL.createObjectURL(file));
+          if (file.type.startsWith('image/')) {
+            setImagePreview(URL.createObjectURL(file));
+          } else {
+            setImagePreview(null);
+          }
         }
       };
 
@@ -1589,6 +1645,7 @@
             setNewPostTitle('');
             setNewPostContent('');
             removeImage();
+            setShowPostForm(false);
           } else {
             setPostError('Post konnte nicht erstellt werden.');
           }
@@ -1599,20 +1656,37 @@
       };
 
       return React.createElement(React.Fragment, null,
-        React.createElement('form', { onSubmit: handleCreatePost, style: { marginBottom: '20px' } },
-          React.createElement('input', { type: 'text', placeholder: 'Titel (optional)', value: newPostTitle, onChange: e => setNewPostTitle(e.target.value), style: { display: 'block', width: '100%', padding: '10px', marginBottom: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px' } }),
-          React.createElement('textarea', { placeholder: 'Nachricht schreiben...', value: newPostContent, onChange: e => setNewPostContent(e.target.value), style: { display: 'block', width: '100%', padding: '10px', marginBottom: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px', minHeight: '80px', fontFamily: 'inherit', fontWeight: 'inherit' } }),
-          imagePreview && React.createElement('div', { style: { position: 'relative', display: 'inline-block', marginBottom: '10px' } },
-            React.createElement('img', { src: imagePreview, style: { maxWidth: '200px', maxHeight: '150px', borderRadius: 'var(--radius)', border: '1px solid var(--border)' } }),
-            React.createElement('button', { type: 'button', onClick: removeImage, style: { position: 'absolute', top: '-8px', right: '-8px', width: '24px', height: '24px', borderRadius: '50%', background: 'var(--danger)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: '24px', textAlign: 'center', padding: 0 } }, '✕')
-          ),
-          React.createElement('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-            React.createElement('input', { ref: fileInputRef, type: 'file', accept: 'image/*', onChange: handleImageSelect, style: { display: 'none' } }),
-            React.createElement('button', { type: 'button', onClick: () => fileInputRef.current?.click(), title: 'Bild anhängen', style: { padding: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }, dangerouslySetInnerHTML: { __html: Icons.image } }),
-            React.createElement('button', { type: 'submit', disabled: saving, style: { padding: '8px 16px', background: saving ? 'var(--text-muted)' : 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius)', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '14px' } }, saving ? 'Wird gesendet...' : 'Posten')
+        React.createElement('div', { style: { marginBottom: '16px' } },
+          // Compact input bar (always visible)
+          !showPostForm && React.createElement('button', {
+            onClick: () => setShowPostForm(true),
+            style: { width: '100%', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-secondary)', color: 'var(--text-muted)', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }
+          }, '✏️ Beitrag schreiben...'),
+          // Expanded form (only when clicked)
+          showPostForm && React.createElement('form', { onSubmit: handleCreatePost, style: { background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '14px' } },
+            React.createElement('input', { type: 'text', placeholder: 'Titel (optional)', value: newPostTitle, onChange: e => setNewPostTitle(e.target.value), style: { display: 'block', width: '100%', padding: '8px 0', marginBottom: '8px', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontSize: '15px', fontWeight: '600', outline: 'none' } }),
+            React.createElement('textarea', { placeholder: 'Was möchtest du teilen?', value: newPostContent, onChange: e => setNewPostContent(e.target.value), autoFocus: true, style: { display: 'block', width: '100%', padding: '8px 0', border: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: '14px', minHeight: '60px', fontFamily: 'inherit', resize: 'none', outline: 'none' } }),
+            // File preview area
+            (imagePreview || selectedImage) && React.createElement('div', { style: { position: 'relative', display: 'inline-block', marginBottom: '10px' } },
+              imagePreview
+                ? React.createElement('img', { src: imagePreview, style: { maxWidth: '200px', maxHeight: '150px', borderRadius: 'var(--radius)', border: '1px solid var(--border)' } })
+                : React.createElement('div', { style: { padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' } },
+                    React.createElement('span', null, '📎'),
+                    React.createElement('span', null, selectedImage.name)
+                  ),
+              React.createElement('button', { type: 'button', onClick: removeImage, style: { position: 'absolute', top: '-8px', right: '-8px', width: '24px', height: '24px', borderRadius: '50%', background: 'var(--danger)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: '24px', textAlign: 'center', padding: 0 } }, '✕')
+            ),
+            // Action bar
+            React.createElement('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)' } },
+              React.createElement('input', { ref: fileInputRef, type: 'file', accept: 'image/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt', onChange: handleImageSelect, style: { display: 'none' } }),
+              React.createElement('button', { type: 'button', onClick: () => fileInputRef.current?.click(), title: 'Datei anhängen', style: { padding: '6px 8px', background: 'transparent', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }, dangerouslySetInnerHTML: { __html: Icons.image } }),
+              React.createElement('div', { style: { flex: 1 } }),
+              React.createElement('button', { type: 'button', onClick: () => { setShowPostForm(false); setNewPostTitle(''); setNewPostContent(''); removeImage(); }, style: { padding: '6px 14px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px' } }, 'Abbrechen'),
+              React.createElement('button', { type: 'submit', disabled: saving, style: { padding: '6px 16px', background: saving ? 'var(--text-muted)' : 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius)', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '500' } }, saving ? 'Wird gesendet...' : 'Posten')
+            ),
+            postError && React.createElement('p', { style: { color: 'var(--danger)', fontSize: '12px', margin: '6px 0 0' } }, postError)
           )
         ),
-        postError && React.createElement('p', { style: { color: 'var(--danger)', fontSize: '13px', margin: '0 0 12px' } }, postError),
         posts.map(post => {
           const author = post.author || { display_name: 'Unbekannt', avatar_color: '#999' };
           const replyCount = post.replies ?? post.reply_count ?? 0;
@@ -1629,7 +1703,12 @@
               React.createElement('p', null, post.content)
             ),
             post.image_url && React.createElement('div', { className: 'post-image', style: { margin: '8px 0' } },
-              React.createElement('img', { src: post.image_url, style: { maxWidth: '100%', maxHeight: '400px', borderRadius: 'var(--radius)', cursor: 'pointer' }, onClick: () => window.open(post.image_url, '_blank') })
+              /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(post.image_url)
+                ? React.createElement('img', { src: post.image_url, style: { maxWidth: '100%', maxHeight: '400px', borderRadius: 'var(--radius)', cursor: 'pointer' }, onClick: () => window.open(post.image_url, '_blank') })
+                : React.createElement('a', { href: post.image_url, target: '_blank', style: { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', color: 'var(--accent)', textDecoration: 'none', fontSize: '13px', marginBottom: '4px' } },
+                    React.createElement('span', null, '📎'),
+                    React.createElement('span', null, post.image_url.split('/').pop().split('?')[0] || 'Datei herunterladen')
+                  )
             ),
             post.reactions && post.reactions.length > 0 && React.createElement('div', { className: 'post-reactions' },
               post.reactions.map(r =>
@@ -1784,7 +1863,7 @@
       );
     }
 
-    function TeamMembersModal({ teamId, dataService, onClose, onMembersUpdated, currentUser }) {
+    function TeamMembersModal({ teamId, dataService, onClose, onMembersUpdated, currentUser, isAdmin }) {
       const [members, setMembers] = useState([]);
       const [availableUsers, setAvailableUsers] = useState([]);
       const [loading, setLoading] = useState(true);
@@ -1855,8 +1934,15 @@
                   members.length > 0 ? members.map(member =>
                     React.createElement('div', { key: member.id, className: 'member-item' },
                       React.createElement(Avatar, { user: member, size: 32 }),
-                      React.createElement('div', { className: 'member-name' }, member.display_name),
-                      member.id !== currentUser.id && React.createElement('button', {
+                      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flex: 1 } },
+                        React.createElement('div', { className: 'member-name' }, member.display_name),
+                        React.createElement('span', {
+                          style: { fontSize: '11px', padding: '2px 6px', borderRadius: '4px',
+                            background: member.role === 'admin' ? 'var(--accent-light)' : 'var(--bg-tertiary)',
+                            color: member.role === 'admin' ? 'var(--accent)' : 'var(--text-muted)' }
+                        }, member.role === 'admin' ? 'Admin' : 'Mitglied')
+                      ),
+                      isAdmin && member.id !== currentUser.id && member.role !== 'admin' && React.createElement('button', {
                         type: 'button',
                         className: 'member-remove',
                         onClick: () => handleRemove(member.id),
@@ -1867,7 +1953,7 @@
                 )
               )
             ),
-            React.createElement('div', null,
+            isAdmin && React.createElement('div', null,
               React.createElement('h4', { style: { fontSize: '14px', fontWeight: '600', marginBottom: '10px' } }, 'Mitglied hinzufügen'),
               React.createElement('input', {
                 type: 'text',
@@ -2053,9 +2139,13 @@
       const handleChatImageSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
-          if (file.size > 5 * 1024 * 1024) { alert('Bild zu groß (max. 5 MB)'); return; }
+          if (file.size > 20 * 1024 * 1024) { alert('Datei zu groß (max. 20 MB)'); return; }
           setChatImage(file);
-          setChatImagePreview(URL.createObjectURL(file));
+          if (file.type.startsWith('image/')) {
+            setChatImagePreview(URL.createObjectURL(file));
+          } else {
+            setChatImagePreview(null);
+          }
         }
       };
 
@@ -2128,7 +2218,14 @@
             },
               !isOwn(msg) && React.createElement(Avatar, { user: msg.sender, size: 28 }),
               React.createElement('div', { className: 'chat-bubble ' + (isOwn(msg) ? 'own' : 'other') },
-                msg.image_url && React.createElement('img', { src: msg.image_url, style: { maxWidth: '240px', maxHeight: '200px', borderRadius: '8px', marginBottom: '4px', cursor: 'pointer', display: 'block' }, onClick: () => window.open(msg.image_url, '_blank') }),
+                msg.image_url && (
+                  /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(msg.image_url)
+                    ? React.createElement('img', { src: msg.image_url, style: { maxWidth: '240px', maxHeight: '200px', borderRadius: '8px', marginBottom: '4px', cursor: 'pointer', display: 'block' }, onClick: () => window.open(msg.image_url, '_blank') })
+                    : React.createElement('a', { href: msg.image_url, target: '_blank', style: { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', color: 'var(--accent)', textDecoration: 'none', fontSize: '13px', marginBottom: '4px' } },
+                        React.createElement('span', null, '📎'),
+                        React.createElement('span', null, msg.image_url.split('/').pop().split('?')[0] || 'Datei herunterladen')
+                      )
+                ),
                 msg.content && msg.content !== '📷 Bild' && React.createElement('div', { className: 'chat-text' }, msg.content),
                 !msg.content && !msg.image_url && React.createElement('div', { className: 'chat-text' }, msg.content),
                 React.createElement('div', { className: 'chat-time' }, formatDate(msg.created_at))
@@ -2147,8 +2244,8 @@
           )
         ),
         React.createElement('form', { className: 'chat-input-bar', onSubmit: handleSend },
-          React.createElement('input', { ref: chatFileRef, type: 'file', accept: 'image/*', onChange: handleChatImageSelect, style: { display: 'none' } }),
-          React.createElement('button', { type: 'button', onClick: () => chatFileRef.current?.click(), title: 'Bild senden', className: 'chat-image-btn', style: { background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }, dangerouslySetInnerHTML: { __html: Icons.image } }),
+          React.createElement('input', { ref: chatFileRef, type: 'file', accept: 'image/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt', onChange: handleChatImageSelect, style: { display: 'none' } }),
+          React.createElement('button', { type: 'button', onClick: () => chatFileRef.current?.click(), title: 'Datei senden', className: 'chat-image-btn', style: { background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }, dangerouslySetInnerHTML: { __html: Icons.image } }),
           React.createElement('input', {
             type: 'text',
             placeholder: 'Nachricht schreiben...',
@@ -2264,6 +2361,8 @@
       const [posts, setPosts] = useState([]);
       const [replies, setReplies] = useState([]);
       const [openThread, setOpenThread] = useState(null);
+      const [hiddenTeams, setHiddenTeams] = useState(new Set());
+      const [showHiddenTeams, setShowHiddenTeams] = useState(false);
 
       // Chat state
       const [conversations, setConversations] = useState([]);
@@ -2284,8 +2383,18 @@
       // Team management modals
       const [showCreateTeam, setShowCreateTeam] = useState(false);
       const [showTeamMembers, setShowTeamMembers] = useState(false);
+      const [userTeamRole, setUserTeamRole] = useState(null);
 
       const dataService = useMemo(() => new DataService(isDemo ? null : supabaseClient), [supabaseClient, isDemo]);
+
+      const toggleTeamVisibility = (teamId) => {
+        setHiddenTeams(prev => {
+          const next = new Set(prev);
+          if (next.has(teamId)) next.delete(teamId);
+          else next.add(teamId);
+          return next;
+        });
+      };
 
       const handleSetupComplete = async ({ isDemo: demoMode, client }) => {
         setIsDemo(demoMode);
@@ -2315,6 +2424,14 @@
           setChannels(channelsData);
           if (channelsData.length > 0) {
             setSelectedChannel(channelsData[0]);
+          }
+          // Check user's role in this team
+          if (!dataService.isDemo) {
+            const members = await dataService.getTeamMembers(firstTeam.id);
+            const me = members.find(m => m.id === selectedUser.id);
+            setUserTeamRole(me?.role || null);
+          } else {
+            setUserTeamRole('admin'); // Demo: always admin
           }
         }
         // Load conversations + all users for chat
@@ -2458,6 +2575,14 @@
         if (channelsData.length > 0) {
           setSelectedChannel(channelsData[0]);
         }
+        // Check user's role in this team
+        if (!dataService.isDemo) {
+          const members = await dataService.getTeamMembers(team.id);
+          const me = members.find(m => m.id === user.id);
+          setUserTeamRole(me?.role || null);
+        } else {
+          setUserTeamRole('admin'); // Demo: always admin
+        }
       };
 
       const handleNewChat = async (targetUser) => {
@@ -2561,17 +2686,43 @@
             )
           ),
           React.createElement('div', { className: 'sidebar-list' },
-            teams.map(team =>
-              React.createElement('button', {
-                key: team.id,
-                className: 'list-item' + (selectedTeam?.id === team.id ? ' active' : ''),
-                onClick: () => handleTeamSelect(team),
-                style: { display: 'flex', gap: '8px', alignItems: 'center' }
-              },
-                React.createElement('div', { style: { width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: team.icon_color, borderRadius: 'var(--radius)', color: 'white', fontSize: '12px', fontWeight: '600' } }, team.icon_text),
-                React.createElement('span', { className: 'list-item-text' }, team.name)
-              )
-            )
+            (() => {
+              const visibleTeams = teams.filter(t => !hiddenTeams.has(t.id));
+              const hiddenTeamsList = teams.filter(t => hiddenTeams.has(t.id));
+              return React.createElement(React.Fragment, null,
+                visibleTeams.map(team =>
+                  React.createElement('div', { key: team.id, className: 'team-item' },
+                    React.createElement('button', {
+                      className: 'list-item' + (selectedTeam?.id === team.id ? ' active' : ''),
+                      onClick: () => handleTeamSelect(team),
+                      style: { display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }
+                    },
+                      React.createElement('div', { style: { width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: team.icon_color, borderRadius: 'var(--radius)', color: 'white', fontSize: '12px', fontWeight: '600' } }, team.icon_text),
+                      React.createElement('span', { className: 'list-item-text' }, team.name)
+                    ),
+                    React.createElement('button', { className: 'team-hide-btn', onClick: (e) => { e.stopPropagation(); toggleTeamVisibility(team.id); }, title: 'Team ausblenden' }, '👁')
+                  )
+                ),
+                hiddenTeamsList.length > 0 && React.createElement('div', { style: { marginTop: '4px' } },
+                  React.createElement('button', { className: 'hidden-teams-toggle', onClick: () => setShowHiddenTeams(prev => !prev) },
+                    React.createElement('span', null, showHiddenTeams ? '▾' : '▸'),
+                    React.createElement('span', null, 'Ausgeblendet (' + hiddenTeamsList.length + ')')
+                  ),
+                  showHiddenTeams && hiddenTeamsList.map(team =>
+                    React.createElement('button', {
+                      key: team.id,
+                      className: 'list-item',
+                      style: { display: 'flex', gap: '8px', alignItems: 'center', opacity: 0.5 },
+                      onClick: () => { toggleTeamVisibility(team.id); handleTeamSelect(team); }
+                    },
+                      React.createElement('div', { style: { width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: team.icon_color, borderRadius: 'var(--radius)', color: 'white', fontSize: '12px', fontWeight: '600' } }, team.icon_text),
+                      React.createElement('span', { className: 'list-item-text' }, team.name),
+                      React.createElement('span', { style: { fontSize: '11px', color: 'var(--text-muted)', marginLeft: 'auto' } }, '👁 Einblenden')
+                    )
+                  )
+                )
+              );
+            })()
           )
         ),
         React.createElement('div', { className: 'sidebar-content' },
@@ -2601,11 +2752,12 @@
             React.createElement('div', { className: 'content-header', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
               React.createElement('h1', null, '# ' + selectedChannel.name),
               selectedTeam && React.createElement('button', {
-                style: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '8px', display: 'flex', alignItems: 'center' },
+                style: { background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text-secondary)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' },
                 onClick: () => setShowTeamMembers(true),
-                title: 'Mitgliederverwaltung'
+                title: 'Mitglieder anzeigen'
               },
-                React.createElement('span', { dangerouslySetInnerHTML: { __html: Icons.settings }, style: { fontSize: '20px' } })
+                React.createElement('span', { dangerouslySetInnerHTML: { __html: Icons.users }, style: { width: '16px', height: '16px' } }),
+                React.createElement('span', null, 'Mitglieder')
               )
             ),
             React.createElement('div', { className: 'content-body' },
@@ -2653,7 +2805,8 @@
           dataService,
           onClose: () => setShowTeamMembers(false),
           onMembersUpdated: () => {}, // Optional callback
-          currentUser: user
+          currentUser: user,
+          isAdmin: userTeamRole === 'admin'
         }),
         // Main app layout
         React.createElement('div', { className: 'app-layout' },
