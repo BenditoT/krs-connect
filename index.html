@@ -1278,7 +1278,8 @@
         if (!query || query.length < 1) return { posts: [], messages: [] };
         if (this.isDemo) {
           const q = query.toLowerCase();
-          const posts = MOCK_POSTS.Allgemein?.filter(p => (p.content + (p.title || '')).toLowerCase().includes(q)) || [];
+          const allPosts = Object.values(MOCK_POSTS).flat();
+          const posts = allPosts.filter(p => (p.content + (p.title || '')).toLowerCase().includes(q));
           return { posts, messages: [] };
         }
         try {
