@@ -807,7 +807,49 @@
       .chat-messages { padding: 8px; }
       .chat-input-bar { padding: 8px; }
       .chat-input-bar textarea { font-size: 16px; } /* Verhindert iOS-Zoom */
-      .mobile-menu-btn { display: block !important; }
+      .mobile-menu-btn {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+        border-radius: var(--radius);
+      }
+      .mobile-menu-btn:active { background: var(--bg-hover); }
+    }
+
+    /* Toast System */
+    .toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      max-width: calc(100% - 32px);
+      width: max-content;
+      box-shadow: 0 4px 12px var(--shadow);
+      pointer-events: auto;
+      animation: toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toast-success { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .toast-error { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+    .toast-info { background: #eff6ff; color: #1e40af; border: 1px solid #93c5fd; }
+    @keyframes toastIn { from { opacity: 0; transform: translateX(100px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+    @media (max-width: 768px) {
+      .toast-container { top: 8px; right: 8px; left: 8px; }
+      .toast { max-width: 100%; }
     }
   </style>
 </head>
@@ -817,20 +859,56 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+  <script>
+    // DOMPurify CDN-Fallback: Falls CDN offline, Legacy-Sanitizer verwenden
+    if (!window.DOMPurify) {
+      console.warn('DOMPurify CDN failed, using legacy fallback sanitizer');
+      window._useLegacySanitizer = true;
+    }
+  </script>
 
   <script type="module">
+    // ============================================================
+    // TOAST SYSTEM — User-Feedback statt console.error
+    // ============================================================
+    function showToast(message, type = 'error') {
+      const container = document.getElementById('toast-container')
+        || (() => {
+          const c = document.createElement('div');
+          c.id = 'toast-container';
+          c.className = 'toast-container';
+          c.setAttribute('role', 'region');
+          c.setAttribute('aria-live', 'polite');
+          document.body.appendChild(c);
+          return c;
+        })();
+      const toast = document.createElement('div');
+      toast.className = 'toast toast-' + (type || 'error');
+      toast.setAttribute('role', 'alert');
+      const icons = { success: '\u2713', error: '\u2715', info: '\u2139' };
+      const iconSpan = document.createElement('span');
+      iconSpan.textContent = icons[type] || '';
+      const msgSpan = document.createElement('span');
+      msgSpan.textContent = String(message);
+      toast.appendChild(iconSpan);
+      toast.appendChild(msgSpan);
+      container.appendChild(toast);
+      setTimeout(() => { toast.remove(); }, 4000);
+    }
+
     // ============================================================
     // MOCK DATA (KRS-specific)
     // ============================================================
     const MOCK_USERS = [
-      { id: 1, username: 'nkotzan', display_name: 'Norbert Kotzan', avatar_color: '#7c6ff7', role: 'admin' },
-      { id: 2, username: 'dschmitt', display_name: 'Daniel Schmitt', avatar_color: '#f59e0b', role: 'admin' },
-      { id: 3, username: 'pcarse', display_name: 'Petra Carse', avatar_color: '#ec4899', role: 'admin' },
-      { id: 4, username: 'mmueller', display_name: 'Maria Müller', avatar_color: '#10b981', role: 'member' },
-      { id: 5, username: 'tweber', display_name: 'Thomas Weber', avatar_color: '#3b82f6', role: 'member' },
-      { id: 6, username: 'sfischer', display_name: 'Sandra Fischer', avatar_color: '#ef4444', role: 'member' },
-      { id: 7, username: 'jbecker', display_name: 'Julia Becker', avatar_color: '#8b5cf6', role: 'member' },
-      { id: 8, username: 'rschulz', display_name: 'Robert Schulz', avatar_color: '#06b6d4', role: 'member' },
+      { id: 1, username: 'nk', display_name: 'Norbert K.', avatar_color: '#7c6ff7', role: 'admin' },
+      { id: 2, username: 'ds', display_name: 'Daniel S.', avatar_color: '#f59e0b', role: 'admin' },
+      { id: 3, username: 'pc', display_name: 'Petra C.', avatar_color: '#ec4899', role: 'admin' },
+      { id: 4, username: 'al', display_name: 'Anna L.', avatar_color: '#10b981', role: 'member' },
+      { id: 5, username: 'mk', display_name: 'Markus K.', avatar_color: '#3b82f6', role: 'member' },
+      { id: 6, username: 'sh', display_name: 'Sabine H.', avatar_color: '#ef4444', role: 'member' },
+      { id: 7, username: 'lw', display_name: 'Laura W.', avatar_color: '#8b5cf6', role: 'member' },
+      { id: 8, username: 'tr', display_name: 'Tim R.', avatar_color: '#06b6d4', role: 'member' },
     ];
 
     const MOCK_TEAMS = [
@@ -872,7 +950,7 @@
       2: [
         {
           id: 1, author: MOCK_USERS[1], title: 'FAQ und Infos Schulwoche 12',
-          content: '<p>Liebe Kolleginnen und Kollegen,</p><p><strong>1. Sperrung Schwimmbad:</strong></p><ul><li>Am Freitag den 21.03.2026 findet kein Schwimmunterricht statt</li><li>Grund: Wartungsarbeiten am Filtersystem</li></ul><p><strong>2. Elternsprechtag:</strong></p><ul><li>Donnerstag, 26.03.2026, 16:00–19:00 Uhr</li><li>Bitte Terminlisten bis Mittwoch eintragen</li></ul><p><strong>3. Fortbildung Medienkompetenz:</strong></p><ul><li>Anmeldung bis 28.03. bei Norbert Kotzan</li><li>Thema: KI im Unterricht — Chancen und Grenzen</li></ul>',
+          content: '<p>Liebe Kolleginnen und Kollegen,</p><p><strong>1. Sperrung Schwimmbad:</strong></p><ul><li>Am Freitag den 21.03.2026 findet kein Schwimmunterricht statt</li><li>Grund: Wartungsarbeiten am Filtersystem</li></ul><p><strong>2. Elternsprechtag:</strong></p><ul><li>Donnerstag, 26.03.2026, 16:00–19:00 Uhr</li><li>Bitte Terminlisten bis Mittwoch eintragen</li></ul><p><strong>3. Fortbildung Medienkompetenz:</strong></p><ul><li>Anmeldung bis 28.03. bei Norbert K.</li><li>Thema: KI im Unterricht — Chancen und Grenzen</li></ul>',
           reactions: [{ emoji: '👍', users: [1, 4, 5], count: 3 }, { emoji: '📝', users: [3], count: 1 }],
           replies: 4, reply_users: [MOCK_USERS[0], MOCK_USERS[3], MOCK_USERS[6]],
           created_at: '20.03.2026, 08:15'
@@ -929,7 +1007,7 @@
     let MOCK_MESSAGES = {
       1: [
         { id: 1, sender: MOCK_USERS[1], content: 'Hey Norbert, kurze Frage:', created_at: '17:25' },
-        { id: 2, sender: MOCK_USERS[1], content: 'Kannst du morgen die Vertretung für die 3. Stunde übernehmen? Frau Fischer ist krank.', created_at: '17:25' },
+        { id: 2, sender: MOCK_USERS[1], content: 'Kannst du morgen die Vertretung für die 3. Stunde übernehmen? Eine Kollegin ist krank.', created_at: '17:25' },
         { id: 3, sender: MOCK_USERS[1], content: 'Wäre Klasse 8a, Musik', created_at: '17:30' },
       ],
       2: [
@@ -1152,6 +1230,7 @@
           return urlData.publicUrl;
         } catch (err) {
           console.error('uploadFile error:', err);
+          showToast('Datei konnte nicht hochgeladen werden. Ist die Datei zu gro\u00df?', 'error');
           return null;
         }
       }
@@ -1176,6 +1255,7 @@
           return data;
         } catch (err) {
           console.error('createPost error:', err);
+          showToast('Beitrag konnte nicht gesendet werden. Bitte pr\u00fcfe deine Internetverbindung.', 'error');
           return null;
         }
       }
@@ -1192,7 +1272,7 @@
           const { data, error } = await this.sb.from('posts').update({ content, title, edited_at: new Date().toISOString() }).eq('id', postId).select('*, author:users(*)').single();
           if (error) throw error;
           return data;
-        } catch (err) { console.error('updatePost error:', err); return null; }
+        } catch (err) { console.error('updatePost error:', err); showToast('Beitrag konnte nicht gespeichert werden. Bitte versuche es erneut.', 'error'); return null; }
       }
 
       async deletePost(postId) {
@@ -1209,7 +1289,7 @@
           const { error } = await this.sb.from('posts').delete().eq('id', postId);
           if (error) throw error;
           return true;
-        } catch (err) { console.error('deletePost error:', err); return false; }
+        } catch (err) { console.error('deletePost error:', err); showToast('Beitrag konnte nicht gel\u00f6scht werden. Bitte versuche es erneut.', 'error'); return false; }
       }
 
       async getReplies(postId) {
@@ -1238,6 +1318,7 @@
           return data;
         } catch (err) {
           console.error('createReply error:', err);
+          showToast('Antwort konnte nicht gesendet werden. Bitte versuche es erneut.', 'error');
           return null;
         }
       }
@@ -1699,26 +1780,44 @@
       } catch { return dateStr; }
     }
 
-    // HTML-Sanitizer: Erlaubt sichere Tags, entfernt Scripts
-    function sanitizeHtml(html) {
-      if (!html) return '';
-      const allowed = ['p','br','b','strong','i','em','u','a','ul','ol','li','h1','h2','h3','h4','blockquote','pre','code','span','div','hr'];
+    // HTML-Sanitizer: DOMPurify mit Legacy-Fallback
+    const SANITIZE_CONFIG = {
+      ALLOWED_TAGS: ['p','br','b','strong','i','em','u','a','ul','ol','li','h1','h2','h3','h4','blockquote','pre','code','span','div','hr'],
+      ALLOWED_ATTR: ['href','target','rel','class'],
+      ALLOW_DATA_ATTR: false
+    };
+
+    function legacySanitizeHtml(html) {
+      const allowed = SANITIZE_CONFIG.ALLOWED_TAGS;
       const tmp = document.createElement('div');
       tmp.innerHTML = html;
-      // Entferne script, iframe, object, embed, form, input
-      tmp.querySelectorAll('script,iframe,object,embed,form,input,style,link').forEach(el => el.remove());
-      // Entferne on*-Attribute
+      tmp.querySelectorAll('script,iframe,object,embed,form,input,style,link,svg,math').forEach(el => el.remove());
       tmp.querySelectorAll('*').forEach(el => {
         for (const attr of [...el.attributes]) {
           if (attr.name.startsWith('on') || attr.name === 'srcdoc') el.removeAttribute(attr.name);
           if (attr.name === 'href' && attr.value.trim().toLowerCase().startsWith('javascript:')) el.removeAttribute(attr.name);
+          if (attr.name === 'src' && attr.value.trim().toLowerCase().startsWith('data:')) el.removeAttribute(attr.name);
         }
-        if (!allowed.includes(el.tagName.toLowerCase())) {
-          el.replaceWith(...el.childNodes);
-        }
+        if (!allowed.includes(el.tagName.toLowerCase())) el.replaceWith(...el.childNodes);
       });
-      // Links: target=_blank
-      tmp.querySelectorAll('a').forEach(a => { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener'); });
+      return tmp.innerHTML;
+    }
+
+    function sanitizeHtml(html) {
+      if (!html) return '';
+      let clean;
+      if (window.DOMPurify && window.DOMPurify.sanitize) {
+        clean = DOMPurify.sanitize(html, SANITIZE_CONFIG);
+      } else {
+        clean = legacySanitizeHtml(html);
+      }
+      // Links: target=_blank hinzufuegen
+      const tmp = document.createElement('div');
+      tmp.innerHTML = clean;
+      tmp.querySelectorAll('a').forEach(a => {
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+      });
       return tmp.innerHTML;
     }
 
@@ -1807,17 +1906,19 @@
           const updated = await dataService.updatePost(postId, editContent, editTitle || null);
           if (updated) {
             setPosts(prev => prev.map(p => p.id === postId ? { ...p, content: editContent, title: editTitle || null, edited_at: new Date().toISOString() } : p));
+            showToast('Beitrag gespeichert', 'success');
           }
-        } catch (err) { console.error('Edit error:', err); }
+        } catch (err) { console.error('Edit error:', err); showToast('Beitrag konnte nicht gespeichert werden.', 'error'); }
         setEditingPost(null);
       };
 
       const handleDeletePost = async (postId) => {
-        if (!confirm('Post wirklich löschen?')) return;
+        if (!confirm('Post wirklich l\u00f6schen?')) return;
         try {
           await dataService.deletePost(postId);
           setPosts(prev => prev.filter(p => p.id !== postId));
-        } catch (err) { console.error('Delete error:', err); }
+          showToast('Beitrag gel\u00f6scht', 'success');
+        } catch (err) { console.error('Delete error:', err); showToast('Beitrag konnte nicht gel\u00f6scht werden.', 'error'); }
       };
 
       const handleImageSelect = (e) => {
@@ -2429,6 +2530,7 @@
           removeChatImage();
         } catch (err) {
           console.error('Send failed:', err);
+          showToast('Nachricht konnte nicht gesendet werden. Bitte pr\u00fcfe deine Verbindung.', 'error');
         }
         setSending(false);
       };
@@ -2747,6 +2849,22 @@
         }
       }, [openThread, dataService]);
 
+      // ESC-Key Handler: Schlie\u00dft Overlays/Panels in Hierarchie
+      const handleEscapeKey = useCallback((e) => {
+        if (e.key !== 'Escape') return;
+        // Nicht in Input/Textarea-Kontexten
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        if (openThread) { e.preventDefault(); setOpenThread(null); return; }
+        if (mobileSidebarOpen) { e.preventDefault(); setMobileSidebarOpen(false); return; }
+        if (showTeamMembers) { e.preventDefault(); setShowTeamMembers(false); return; }
+      }, [openThread, mobileSidebarOpen, showTeamMembers]);
+
+      useEffect(() => {
+        document.addEventListener('keydown', handleEscapeKey);
+        return () => document.removeEventListener('keydown', handleEscapeKey);
+      }, [handleEscapeKey]);
+
       // Chat messages subscription
       useEffect(() => {
         if (selectedConversation) {
@@ -3051,7 +3169,7 @@
           selectedChannel && React.createElement(React.Fragment, null,
             React.createElement('div', { className: 'content-header', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
               React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-                React.createElement('button', { className: 'mobile-menu-btn', onClick: () => setMobileSidebarOpen(true), style: { display: 'none', background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '4px 8px', color: 'var(--text-secondary)' } }, '\u2630'),
+                React.createElement('button', { className: 'mobile-menu-btn', onClick: () => setMobileSidebarOpen(true), style: { display: 'none', background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--text-secondary)' } }, '\u2630'),
                 React.createElement('h1', null, '# ' + selectedChannel.name)
               ),
               selectedTeam && React.createElement('button', {
