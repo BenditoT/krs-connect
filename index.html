@@ -1021,6 +1021,7 @@
         this.sb = supabaseClient;
         this.isDemo = !supabaseClient;
         this.subscriptions = [];
+      }
 
       async getStorageStats() {
         if (this.isDemo) return { used: 0, files: 0 };
