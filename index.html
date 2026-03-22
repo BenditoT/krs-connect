@@ -790,13 +790,24 @@
 
     /* Responsive */
     @media (max-width: 768px) {
-      .sidebar-content { width: 100%; }
-      .content { display: none; }
-      .app-layout { flex-direction: column; }
-      .sidebar { width: 100%; height: 60px; flex-direction: row; padding: 0 16px; gap: 16px; }
-      .sidebar-nav { flex-direction: row; flex: 1; }
-      .sidebar-bottom { flex-direction: row; }
+      .app-layout { flex-direction: column; height: 100vh; }
+      .sidebar { width: 100%; height: 56px; flex-direction: row; padding: 0 8px; gap: 4px; order: 2; border-top: 1px solid var(--border); border-right: none; }
+      .sidebar-nav { flex-direction: row; flex: 1; justify-content: space-around; }
+      .sidebar-nav button { font-size: 11px; padding: 6px 8px; }
+      .sidebar-bottom { flex-direction: row; gap: 4px; }
+      .sidebar-content { position: fixed; top: 0; left: 0; width: 80vw; max-width: 300px; height: calc(100vh - 56px); z-index: 100; transform: translateX(-100%); transition: transform 0.25s ease; background: var(--bg-secondary); box-shadow: 2px 0 12px rgba(0,0,0,0.15); }
+      .sidebar-content.mobile-open { transform: translateX(0); }
+      .mobile-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 99; }
+      .mobile-overlay.visible { display: block; }
+      .content { flex: 1; order: 1; overflow-y: auto; min-height: 0; }
+      .content-header { position: sticky; top: 0; z-index: 10; }
       .modal { width: 95vw; max-height: 90vh; }
+      .post-card { padding: 12px; }
+      .post-header { gap: 8px; }
+      .chat-messages { padding: 8px; }
+      .chat-input-bar { padding: 8px; }
+      .chat-input-bar textarea { font-size: 16px; } /* Verhindert iOS-Zoom */
+      .mobile-menu-btn { display: block !important; }
     }
   </style>
 </head>
@@ -1167,6 +1178,38 @@
           console.error('createPost error:', err);
           return null;
         }
+      }
+
+      async updatePost(postId, content, title = null) {
+        if (this.isDemo) {
+          for (const chPosts of Object.values(MOCK_POSTS)) {
+            const post = chPosts.find(p => p.id === postId);
+            if (post) { post.content = content; post.title = title; post.edited_at = new Date().toISOString(); return post; }
+          }
+          return null;
+        }
+        try {
+          const { data, error } = await this.sb.from('posts').update({ content, title, edited_at: new Date().toISOString() }).eq('id', postId).select('*, author:users(*)').single();
+          if (error) throw error;
+          return data;
+        } catch (err) { console.error('updatePost error:', err); return null; }
+      }
+
+      async deletePost(postId) {
+        if (this.isDemo) {
+          for (const [chId, chPosts] of Object.entries(MOCK_POSTS)) {
+            const idx = chPosts.findIndex(p => p.id === postId);
+            if (idx !== -1) { chPosts.splice(idx, 1); return true; }
+          }
+          return false;
+        }
+        try {
+          // Delete replies first, then the post
+          await this.sb.from('posts').delete().eq('parent_id', postId);
+          const { error } = await this.sb.from('posts').delete().eq('id', postId);
+          if (error) throw error;
+          return true;
+        } catch (err) { console.error('deletePost error:', err); return false; }
       }
 
       async getReplies(postId) {
@@ -1656,6 +1699,29 @@
       } catch { return dateStr; }
     }
 
+    // HTML-Sanitizer: Erlaubt sichere Tags, entfernt Scripts
+    function sanitizeHtml(html) {
+      if (!html) return '';
+      const allowed = ['p','br','b','strong','i','em','u','a','ul','ol','li','h1','h2','h3','h4','blockquote','pre','code','span','div','hr'];
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      // Entferne script, iframe, object, embed, form, input
+      tmp.querySelectorAll('script,iframe,object,embed,form,input,style,link').forEach(el => el.remove());
+      // Entferne on*-Attribute
+      tmp.querySelectorAll('*').forEach(el => {
+        for (const attr of [...el.attributes]) {
+          if (attr.name.startsWith('on') || attr.name === 'srcdoc') el.removeAttribute(attr.name);
+          if (attr.name === 'href' && attr.value.trim().toLowerCase().startsWith('javascript:')) el.removeAttribute(attr.name);
+        }
+        if (!allowed.includes(el.tagName.toLowerCase())) {
+          el.replaceWith(...el.childNodes);
+        }
+      });
+      // Links: target=_blank
+      tmp.querySelectorAll('a').forEach(a => { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener'); });
+      return tmp.innerHTML;
+    }
+
     function SetupScreen({ onSetupComplete }) {
       const [error, setError] = useState('');
       const [loading, setLoading] = useState(false);
@@ -1726,6 +1792,33 @@
       const [imagePreview, setImagePreview] = useState(null);
       const [showPostForm, setShowPostForm] = useState(false);
       const fileInputRef = useRef(null);
+      const [editingPost, setEditingPost] = useState(null);
+      const [editContent, setEditContent] = useState('');
+      const [editTitle, setEditTitle] = useState('');
+
+      const handleEditPost = (post) => {
+        setEditingPost(post.id);
+        setEditContent(post.content);
+        setEditTitle(post.title || '');
+      };
+
+      const handleSaveEdit = async (postId) => {
+        try {
+          const updated = await dataService.updatePost(postId, editContent, editTitle || null);
+          if (updated) {
+            setPosts(prev => prev.map(p => p.id === postId ? { ...p, content: editContent, title: editTitle || null, edited_at: new Date().toISOString() } : p));
+          }
+        } catch (err) { console.error('Edit error:', err); }
+        setEditingPost(null);
+      };
+
+      const handleDeletePost = async (postId) => {
+        if (!confirm('Post wirklich löschen?')) return;
+        try {
+          await dataService.deletePost(postId);
+          setPosts(prev => prev.filter(p => p.id !== postId));
+        } catch (err) { console.error('Delete error:', err); }
+      };
 
       const handleImageSelect = (e) => {
         const file = e.target.files[0];
@@ -1808,18 +1901,35 @@
         posts.map(post => {
           const author = post.author || { display_name: 'Unbekannt', avatar_color: '#999' };
           const replyCount = post.replies ?? post.reply_count ?? 0;
+          const isOwner = user && (post.author_id === user.id || user.role === 'admin');
+          const isEditing = editingPost === post.id;
           return React.createElement('div', { key: post.id, className: 'post' },
-            React.createElement('div', { className: 'post-header' },
-              React.createElement(Avatar, { user: author, size: 36 }),
-              React.createElement('div', null,
-                React.createElement('div', { className: 'post-author' }, author.display_name),
-                React.createElement('div', { className: 'post-time' }, formatDate(post.created_at))
+            React.createElement('div', { className: 'post-header', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
+              React.createElement('div', { style: { display: 'flex', gap: '10px', alignItems: 'center' } },
+                React.createElement(Avatar, { user: author, size: 36 }),
+                React.createElement('div', null,
+                  React.createElement('div', { className: 'post-author' }, author.display_name),
+                  React.createElement('div', { className: 'post-time' }, formatDate(post.created_at), post.edited_at && ' (bearbeitet)')
+                )
+              ),
+              isOwner && !isEditing && React.createElement('div', { style: { display: 'flex', gap: '4px' } },
+                React.createElement('button', { onClick: () => handleEditPost(post), title: 'Bearbeiten', style: { background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', color: 'var(--text-muted)', fontSize: '14px', borderRadius: 'var(--radius)' } }, '✏️'),
+                React.createElement('button', { onClick: () => handleDeletePost(post.id), title: 'Löschen', style: { background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', color: 'var(--text-muted)', fontSize: '14px', borderRadius: 'var(--radius)' } }, '🗑️')
               )
             ),
-            post.title && React.createElement('div', { className: 'post-title' }, post.title),
-            React.createElement('div', { className: 'post-content' },
-              React.createElement('p', null, post.content)
-            ),
+            isEditing
+              ? React.createElement('div', { style: { padding: '8px 0' } },
+                  React.createElement('input', { type: 'text', value: editTitle, onChange: e => setEditTitle(e.target.value), placeholder: 'Titel (optional)', style: { display: 'block', width: '100%', padding: '6px 8px', marginBottom: '6px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '600' } }),
+                  React.createElement('textarea', { value: editContent, onChange: e => setEditContent(e.target.value), style: { display: 'block', width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '14px', minHeight: '80px', fontFamily: 'inherit', resize: 'vertical' } }),
+                  React.createElement('div', { style: { display: 'flex', gap: '8px', marginTop: '8px' } },
+                    React.createElement('button', { onClick: () => handleSaveEdit(post.id), style: { padding: '6px 14px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', fontSize: '13px' } }, 'Speichern'),
+                    React.createElement('button', { onClick: () => setEditingPost(null), style: { padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' } }, 'Abbrechen')
+                  )
+                )
+              : React.createElement(React.Fragment, null,
+                  post.title && React.createElement('div', { className: 'post-title' }, post.title),
+                  React.createElement('div', { className: 'post-content', dangerouslySetInnerHTML: { __html: sanitizeHtml(post.content) } })
+                ),
             post.image_url && React.createElement('div', { className: 'post-image', style: { margin: '8px 0' } },
               /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(post.image_url)
                 ? React.createElement('img', { src: post.image_url, style: { maxWidth: '100%', maxHeight: '400px', borderRadius: 'var(--radius)', cursor: 'pointer' }, onClick: () => window.open(post.image_url, '_blank') })
@@ -1877,14 +1987,14 @@
                 )
               ),
               post.title && React.createElement('div', { className: 'post-title' }, post.title),
-              React.createElement('div', { className: 'post-content' }, React.createElement('p', null, post.content))
+              React.createElement('div', { className: 'post-content', dangerouslySetInnerHTML: { __html: sanitizeHtml(post.content) } })
             ),
             replies.map(reply => {
               const replyAuthor = reply.author || { display_name: 'Unbekannt' };
               return React.createElement('div', { key: reply.id, className: 'thread-reply' },
                 React.createElement('div', { className: 'thread-reply-author' }, replyAuthor.display_name),
                 React.createElement('div', { className: 'thread-reply-time' }, formatDate(reply.created_at)),
-                React.createElement('div', { className: 'thread-reply-content' }, reply.content)
+                React.createElement('div', { className: 'thread-reply-content', dangerouslySetInnerHTML: { __html: sanitizeHtml(reply.content) } })
               );
             })
           ),
@@ -2463,7 +2573,7 @@
                     )
                   ),
                   post.title && React.createElement('div', { className: 'post-title' }, post.title),
-                  React.createElement('p', null, post.content)
+                  React.createElement('div', { dangerouslySetInnerHTML: { __html: sanitizeHtml(post.content) }, style: { fontSize: '14px' } })
                 );
               })
             ),
@@ -2477,7 +2587,7 @@
                     React.createElement('strong', { style: { fontSize: '13px' } }, sender.display_name),
                     React.createElement('span', { style: { fontSize: '12px', color: 'var(--text-muted)' } }, formatDate(msg.created_at))
                   ),
-                  React.createElement('p', { style: { margin: 0, fontSize: '14px' } }, msg.content)
+                  React.createElement('div', { style: { margin: 0, fontSize: '14px' }, dangerouslySetInnerHTML: { __html: sanitizeHtml(msg.content) } })
                 );
               })
             ),
@@ -2523,7 +2633,7 @@
 
       // Unread notifications
       const [unreadChatCount, setUnreadChatCount] = useState(0);
-      const [unreadPostChannels, setUnreadPostChannels] = useState(new Set());
+      const [unreadPostChannels, setUnreadPostChannels] = useState(new Map());
 
       // Online presence
       const [onlineUsers, setOnlineUsers] = useState(new Set());
@@ -2536,6 +2646,9 @@
       const [hasMoreMessages, setHasMoreMessages] = useState(false);
       const [loadingMore, setLoadingMore] = useState(false);
       const PAGE_SIZE = 50;
+
+      // Mobile sidebar
+      const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
       // Team management modals
       const [showCreateTeam, setShowCreateTeam] = useState(false);
@@ -2688,8 +2801,8 @@
             if (newPost.parent_id) return; // Skip replies
             // Mark channel as having unread posts
             setUnreadPostChannels(prev => {
-              const next = new Set(prev);
-              next.add(newPost.channel_id);
+              const next = new Map(prev);
+              next.set(newPost.channel_id, (next.get(newPost.channel_id) || 0) + 1);
               return next;
             });
           })
@@ -2724,8 +2837,9 @@
       // Clear unread posts when selecting a channel
       const handleChannelSelect = (ch) => {
         setSelectedChannel(ch);
+        setMobileSidebarOpen(false);
         setUnreadPostChannels(prev => {
-          const next = new Set(prev);
+          const next = new Map(prev);
           next.delete(ch.id);
           return next;
         });
@@ -2859,7 +2973,8 @@
 
       // === TEAMS VIEW ===
       const teamsView = React.createElement(React.Fragment, null,
-        React.createElement('div', { className: 'sidebar-content' },
+        mobileSidebarOpen && React.createElement('div', { className: 'mobile-overlay visible', onClick: () => setMobileSidebarOpen(false) }),
+        React.createElement('div', { className: 'sidebar-content' + (mobileSidebarOpen ? ' mobile-open' : '') },
           React.createElement('div', { className: 'sidebar-header', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
             React.createElement('h2', null, 'Teams'),
             React.createElement('button', {
@@ -2910,22 +3025,22 @@
             })()
           )
         ),
-        React.createElement('div', { className: 'sidebar-content' },
+        React.createElement('div', { className: 'sidebar-content' + (mobileSidebarOpen ? ' mobile-open' : '') },
           selectedTeam && React.createElement(React.Fragment, null,
             React.createElement('div', { className: 'sidebar-header' },
               React.createElement('h2', null, '# Kanäle')
             ),
             React.createElement('div', { className: 'sidebar-list' },
               channels.map(ch => {
-                const hasUnread = unreadPostChannels.has(ch.id);
+                const unreadCount = unreadPostChannels.get(ch.id) || 0;
                 return React.createElement('button', {
                   key: ch.id,
                   className: 'list-item' + (selectedChannel?.id === ch.id ? ' active' : ''),
                   onClick: () => handleChannelSelect(ch)
                 },
                   React.createElement('span', { style: { fontSize: '12px' } }, '#'),
-                  React.createElement('span', { className: 'list-item-text' + (hasUnread ? ' channel-unread' : '') }, ch.name),
-                  hasUnread && React.createElement('span', { className: 'channel-dot' })
+                  React.createElement('span', { className: 'list-item-text' + (unreadCount > 0 ? ' channel-unread' : '') }, ch.name),
+                  unreadCount > 0 && React.createElement('span', { className: 'unread-badge' }, unreadCount)
                 );
               }
               )
@@ -2935,7 +3050,10 @@
         React.createElement('div', { className: 'content' },
           selectedChannel && React.createElement(React.Fragment, null,
             React.createElement('div', { className: 'content-header', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-              React.createElement('h1', null, '# ' + selectedChannel.name),
+              React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                React.createElement('button', { className: 'mobile-menu-btn', onClick: () => setMobileSidebarOpen(true), style: { display: 'none', background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '4px 8px', color: 'var(--text-secondary)' } }, '\u2630'),
+                React.createElement('h1', null, '# ' + selectedChannel.name)
+              ),
               selectedTeam && React.createElement('button', {
                 style: { background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text-secondary)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' },
                 onClick: () => setShowTeamMembers(true),
@@ -2954,7 +3072,8 @@
 
       // === CHAT VIEW ===
       const chatView = React.createElement(React.Fragment, null,
-        React.createElement('div', { className: 'sidebar-content', style: { borderRight: '1px solid var(--border)' } },
+        mobileSidebarOpen && React.createElement('div', { className: 'mobile-overlay visible', onClick: () => setMobileSidebarOpen(false) }),
+        React.createElement('div', { className: 'sidebar-content' + (mobileSidebarOpen ? ' mobile-open' : ''), style: { borderRight: '1px solid var(--border)' } },
           React.createElement(ConversationList, {
             conversations,
             currentUser: user,
@@ -3008,7 +3127,7 @@
               title: 'Teams & Kanäle'
             },
               React.createElement('span', { dangerouslySetInnerHTML: { __html: Icons.teams } }),
-              unreadPostChannels.size > 0 && React.createElement('span', { className: 'nav-badge' }, unreadPostChannels.size)
+              unreadPostChannels.size > 0 && React.createElement('span', { className: 'nav-badge' }, Array.from(unreadPostChannels.values()).reduce((a, b) => a + b, 0))
             ),
             React.createElement('button', {
               className: 'nav-item' + (view === 'chat' ? ' active' : ''),
