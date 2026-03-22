@@ -1069,10 +1069,10 @@
         }
       }
 
-      async getPosts(channelId) {
+      async getPosts(channelId, limit = 50, offset = 0) {
         if (this.isDemo) return MOCK_POSTS[channelId] || [];
         try {
-          const { data, error } = await this.sb.from('posts').select('*, author:users(*)').eq('channel_id', channelId).is('parent_id', null).order('created_at', { ascending: false });
+          const { data, error } = await this.sb.from('posts').select('*, author:users(*)').eq('channel_id', channelId).is('parent_id', null).order('created_at', { ascending: false }).range(offset, offset + limit - 1);
           if (error) throw error;
           return data || [];
         } catch (err) {
@@ -1196,12 +1196,13 @@
         }
       }
 
-      async getMessages(conversationId) {
+      async getMessages(conversationId, limit = 50, offset = 0) {
         if (this.isDemo) return MOCK_MESSAGES[conversationId] || [];
         try {
-          const { data, error } = await this.sb.from('messages').select('*, sender:users(*)').eq('conversation_id', conversationId).order('created_at');
+          // Lade die letzten N Nachrichten (neueste zuerst holen, dann umdrehen für Anzeige)
+          const { data, error } = await this.sb.from('messages').select('*, sender:users(*)').eq('conversation_id', conversationId).order('created_at', { ascending: false }).range(offset, offset + limit - 1);
           if (error) throw error;
-          return data || [];
+          return (data || []).reverse();
         } catch (err) {
           console.error('getMessages error:', err);
           return [];
@@ -1622,7 +1623,7 @@
       );
     }
 
-    function PostList({ posts, setPosts, channelId, dataService, user, onOpenThread }) {
+    function PostList({ posts, setPosts, channelId, dataService, user, onOpenThread, hasMore, onLoadMore, loadingMore }) {
       const [newPostTitle, setNewPostTitle] = useState('');
       const [newPostContent, setNewPostContent] = useState('');
       const [saving, setSaving] = useState(false);
@@ -1742,7 +1743,14 @@
               React.createElement('button', { onClick: () => onOpenThread(post) }, '💬 Antworten (' + replyCount + ')')
             )
           );
-        })
+        }),
+        hasMore && React.createElement('div', { style: { textAlign: 'center', padding: '16px 0' } },
+          React.createElement('button', {
+            onClick: onLoadMore,
+            disabled: loadingMore,
+            style: { padding: '8px 24px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', cursor: loadingMore ? 'not-allowed' : 'pointer', color: 'var(--text-secondary)', fontSize: '13px' }
+          }, loadingMore ? 'Wird geladen...' : 'Ältere Beiträge laden')
+        )
       );
     }
 
@@ -2164,7 +2172,7 @@
       );
     }
 
-    function ChatPanel({ conversation, messages, setMessages, dataService, currentUser, onBack, onlineUsers }) {
+    function ChatPanel({ conversation, messages, setMessages, dataService, currentUser, onBack, onlineUsers, hasMore, onLoadMore, loadingMore }) {
       const [input, setInput] = useState('');
       const [sending, setSending] = useState(false);
       const [chatImage, setChatImage] = useState(null);
@@ -2253,6 +2261,13 @@
           )
         ),
         React.createElement('div', { className: 'chat-messages' },
+          hasMore && React.createElement('div', { style: { textAlign: 'center', padding: '8px 0' } },
+            React.createElement('button', {
+              onClick: onLoadMore,
+              disabled: loadingMore,
+              style: { padding: '4px 16px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: '12px', cursor: loadingMore ? 'not-allowed' : 'pointer', color: 'var(--text-muted)', fontSize: '12px' }
+            }, loadingMore ? '...' : '↑ Ältere Nachrichten')
+          ),
           messages.map(msg =>
             React.createElement('div', {
               key: msg.id,
@@ -2422,6 +2437,12 @@
 
       const [loadingUsers, setLoadingUsers] = useState(false);
 
+      // Pagination
+      const [hasMorePosts, setHasMorePosts] = useState(false);
+      const [hasMoreMessages, setHasMoreMessages] = useState(false);
+      const [loadingMore, setLoadingMore] = useState(false);
+      const PAGE_SIZE = 50;
+
       // Team management modals
       const [showCreateTeam, setShowCreateTeam] = useState(false);
       const [showTeamMembers, setShowTeamMembers] = useState(false);
@@ -2488,8 +2509,11 @@
         if (selectedChannel) {
           let cancelled = false;
           const loadPosts = async () => {
-            const postsData = await dataService.getPosts(selectedChannel.id);
-            if (!cancelled) setPosts(postsData);
+            const postsData = await dataService.getPosts(selectedChannel.id, PAGE_SIZE, 0);
+            if (!cancelled) {
+              setPosts(postsData);
+              setHasMorePosts(postsData.length >= PAGE_SIZE);
+            }
           };
           loadPosts();
           const unsub = dataService.subscribeToChannel(selectedChannel.id, newPost => {
@@ -2521,8 +2545,11 @@
         if (selectedConversation) {
           let cancelled = false;
           const loadMessages = async () => {
-            const msgs = await dataService.getMessages(selectedConversation.id);
-            if (!cancelled) setChatMessages(msgs || []);
+            const msgs = await dataService.getMessages(selectedConversation.id, PAGE_SIZE, 0);
+            if (!cancelled) {
+              setChatMessages(msgs || []);
+              setHasMoreMessages((msgs || []).length >= PAGE_SIZE);
+            }
           };
           loadMessages();
           const unsub = dataService.subscribeToConversation(selectedConversation.id, newMsg => {
@@ -2706,6 +2733,28 @@
         setShowOnlinePanel(false);
       };
 
+      const loadMorePosts = async () => {
+        if (loadingMore || !selectedChannel) return;
+        setLoadingMore(true);
+        const older = await dataService.getPosts(selectedChannel.id, PAGE_SIZE, posts.length);
+        if (older.length > 0) {
+          setPosts(prev => [...prev, ...older]);
+        }
+        setHasMorePosts(older.length >= PAGE_SIZE);
+        setLoadingMore(false);
+      };
+
+      const loadMoreMessages = async () => {
+        if (loadingMore || !selectedConversation) return;
+        setLoadingMore(true);
+        const older = await dataService.getMessages(selectedConversation.id, PAGE_SIZE, chatMessages.length);
+        if (older.length > 0) {
+          setChatMessages(prev => [...older, ...prev]);
+        }
+        setHasMoreMessages(older.length >= PAGE_SIZE);
+        setLoadingMore(false);
+      };
+
       if (!setupComplete) {
         return React.createElement(SetupScreen, { onSetupComplete: handleSetupComplete });
       }
@@ -2803,7 +2852,7 @@
               )
             ),
             React.createElement('div', { className: 'content-body' },
-              React.createElement(PostList, { posts, setPosts, channelId: selectedChannel?.id, dataService, user, onOpenThread: setOpenThread })
+              React.createElement(PostList, { posts, setPosts, channelId: selectedChannel?.id, dataService, user, onOpenThread: setOpenThread, hasMore: hasMorePosts, onLoadMore: loadMorePosts, loadingMore })
             )
           )
         )
@@ -2831,7 +2880,10 @@
             dataService,
             currentUser: user,
             onBack: null,
-            onlineUsers
+            onlineUsers,
+            hasMore: hasMoreMessages,
+            onLoadMore: loadMoreMessages,
+            loadingMore
           })
         )
       );
