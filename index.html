@@ -847,9 +847,36 @@
     .toast-info { background: #eff6ff; color: #1e40af; border: 1px solid #93c5fd; }
     @keyframes toastIn { from { opacity: 0; transform: translateX(100px); } to { opacity: 1; transform: translateX(0); } }
     @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+
+    /* Feedback Modal */
+    .feedback-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 9998; display: flex; align-items: center; justify-content: center; }
+    .feedback-modal { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 24px; width: 420px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+    .feedback-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .feedback-categories { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .feedback-cat { padding: 10px 16px; min-height: 44px; border-radius: 22px; border: 1px solid var(--border); background: var(--bg-primary); cursor: pointer; font-size: 14px; transition: all 0.15s; display: flex; align-items: center; gap: 6px; }
+    .feedback-cat:hover { border-color: var(--accent); }
+    .feedback-cat.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .feedback-stars { display: flex; gap: 4px; margin-bottom: 16px; }
+    .feedback-star { font-size: 32px; cursor: pointer; background: none; border: none; padding: 4px; min-width: 44px; min-height: 44px; transition: transform 0.15s; color: var(--text-muted); }
+    .feedback-star:hover { transform: scale(1.2); }
+    .feedback-star.active { color: #f59e0b; }
+    .feedback-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .feedback-textarea { width: 100%; min-height: 100px; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; font-size: 14px; font-family: inherit; resize: vertical; background: var(--bg-primary); color: var(--text-primary); }
+    .feedback-textarea:focus { outline: none; border-color: var(--accent); }
+    .feedback-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+    .feedback-btn { padding: 10px 20px; border-radius: var(--radius); border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.15s; }
+    .feedback-btn-cancel { background: var(--bg-tertiary); color: var(--text-primary); }
+    .feedback-btn-cancel:hover { background: var(--bg-hover); }
+    .feedback-btn-send { background: var(--accent); color: white; min-width: 120px; }
+    .feedback-btn-send:hover { background: var(--accent-hover); }
+    .feedback-btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
+    .feedback-trigger { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; font-size: 18px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; transition: color 0.15s; }
+    .feedback-trigger:hover { color: var(--accent-orange); }
+
     @media (max-width: 768px) {
       .toast-container { top: 8px; right: 8px; left: 8px; }
       .toast { max-width: 100%; }
+      .feedback-modal { padding: 16px; }
     }
   </style>
 </head>
@@ -2707,6 +2734,123 @@
       );
     }
 
+    // ============================================================
+    // FEEDBACK MODAL
+    // ============================================================
+    const FEEDBACK_GAS_URL = 'https://script.google.com/macros/s/AKfycbwr9ZV9108jpkfN4nKboTuwMEgUhBOxW2c2ksWgazKNeSgiINL4G2ZNUMKeEzfaOj3H_g/exec';
+
+    function FeedbackModal({ user, onClose }) {
+      const [category, setCategory] = useState('');
+      const [rating, setRating] = useState(0);
+      const [message, setMessage] = useState('');
+      const [sending, setSending] = useState(false);
+      const [lastSubmit, setLastSubmit] = useState(0);
+
+      const categories = [
+        { id: 'bug', label: '🐛 Bug / Fehler' },
+        { id: 'verbesserung', label: '💡 Verbesserung' },
+        { id: 'lob', label: '👍 Lob' },
+        { id: 'frage', label: '❓ Frage' },
+        { id: 'sonstiges', label: '📝 Sonstiges' }
+      ];
+
+      const handleSubmit = async () => {
+        if (!message.trim() && !category) {
+          showToast('Bitte schreibe eine Nachricht oder wähle eine Kategorie.', 'info');
+          return;
+        }
+        // Rate-Limiting: 10 Sekunden Cooldown
+        if (Date.now() - lastSubmit < 10000) {
+          showToast('Bitte warte einen Moment vor dem nächsten Feedback.', 'info');
+          return;
+        }
+        setSending(true);
+        try {
+          const payload = {
+            name: String(user?.display_name || 'Anonym').substring(0, 100),
+            category: category || 'Sonstiges',
+            rating: Math.min(Math.max(rating, 0), 5),
+            message: String(message.trim()).substring(0, 2000),
+            page: String(window.location.href).substring(0, 200),
+            userAgent: String(navigator.userAgent).substring(0, 300)
+          };
+
+          if (FEEDBACK_GAS_URL) {
+            const resp = await fetch(FEEDBACK_GAS_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              redirect: 'follow'
+            });
+            if (!resp.ok && resp.type !== 'opaque') {
+              throw new Error('Server antwortete mit ' + resp.status);
+            }
+          } else {
+            // Kein Endpoint konfiguriert — Demo-Hinweis
+            console.log('Feedback (Demo-Modus, kein GAS-Endpoint):', payload);
+          }
+
+          setLastSubmit(Date.now());
+          showToast('Danke für dein Feedback!', 'success');
+          onClose();
+        } catch (err) {
+          console.error('Feedback send error:', err);
+          showToast('Feedback konnte nicht gesendet werden. Bitte versuche es später erneut.', 'error');
+          setSending(false);
+        }
+      };
+
+      return React.createElement('div', { className: 'feedback-overlay', onClick: (ev) => { if (ev.target === ev.currentTarget) onClose(); } },
+        React.createElement('div', { className: 'feedback-modal' },
+          React.createElement('div', { className: 'feedback-title' }, '📣', ' Feedback geben'),
+
+          React.createElement('div', { className: 'feedback-label' }, 'Kategorie'),
+          React.createElement('div', { className: 'feedback-categories' },
+            categories.map(cat =>
+              React.createElement('button', {
+                key: cat.id,
+                className: 'feedback-cat' + (category === cat.id ? ' active' : ''),
+                onClick: () => setCategory(cat.id)
+              }, cat.label)
+            )
+          ),
+
+          React.createElement('div', { className: 'feedback-label' }, 'Wie gefällt dir KRS Connect? (optional)'),
+          React.createElement('div', { className: 'feedback-stars' },
+            [1, 2, 3, 4, 5].map(star =>
+              React.createElement('button', {
+                key: star,
+                className: 'feedback-star' + (star <= rating ? ' active' : ''),
+                onClick: () => setRating(star === rating ? 0 : star),
+                'aria-label': star + ' Sterne'
+              }, star <= rating ? '★' : '☆')
+            )
+          ),
+
+          React.createElement('div', { className: 'feedback-label' }, 'Deine Nachricht'),
+          React.createElement('textarea', {
+            className: 'feedback-textarea',
+            placeholder: 'Was funktioniert gut? Was können wir verbessern? Wo hakt es?',
+            value: message,
+            onChange: (ev) => setMessage(ev.target.value),
+            maxLength: 2000
+          }),
+          React.createElement('div', { style: { fontSize: '11px', color: 'var(--text-muted)', textAlign: 'right', marginTop: '4px' } },
+            message.length + ' / 2000'
+          ),
+
+          React.createElement('div', { className: 'feedback-actions' },
+            React.createElement('button', { className: 'feedback-btn feedback-btn-cancel', onClick: onClose }, 'Abbrechen'),
+            React.createElement('button', {
+              className: 'feedback-btn feedback-btn-send',
+              onClick: handleSubmit,
+              disabled: sending
+            }, sending ? 'Sende...' : '📨 Absenden')
+          )
+        )
+      );
+    }
+
     function App() {
       const [setupComplete, setSetupComplete] = useState(false);
       const [supabaseClient, setSupabaseClient] = useState(null);
@@ -2740,6 +2884,7 @@
       // Online presence
       const [onlineUsers, setOnlineUsers] = useState(new Set());
       const [showOnlinePanel, setShowOnlinePanel] = useState(false);
+      const [showFeedback, setShowFeedback] = useState(false);
 
       const [loadingUsers, setLoadingUsers] = useState(false);
 
@@ -3271,6 +3416,7 @@
               React.createElement('span', { className: 'online-dot small' }),
               React.createElement('span', { className: 'online-count' }, onlineUsers.size || '–')
             ),
+            React.createElement('button', { className: 'feedback-trigger', onClick: () => setShowFeedback(true), title: 'Feedback geben' }, '📣'),
             React.createElement('button', { className: 'icon-btn', onClick: handleLogout, title: 'Abmelden', dangerouslySetInnerHTML: { __html: Icons.logout } })
           ),
           // Online Users Panel (Popup)
@@ -3309,7 +3455,9 @@
           view === 'teams' ? teamsView : view === 'chat' ? chatView : React.createElement(SearchView, { dataService, user })
         ),
         // Thread overlay (nur in Teams-View)
-        view === 'teams' && openThread && React.createElement(ThreadPanel, { post: openThread, replies, dataService, user, onClose: () => setOpenThread(null) })
+        view === 'teams' && openThread && React.createElement(ThreadPanel, { post: openThread, replies, dataService, user, onClose: () => setOpenThread(null) }),
+        // Feedback Modal
+        showFeedback && React.createElement(FeedbackModal, { user, onClose: () => setShowFeedback(false) })
       )
       );
     }
