@@ -2778,13 +2778,10 @@
           if (FEEDBACK_GAS_URL) {
             const resp = await fetch(FEEDBACK_GAS_URL, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
-              redirect: 'follow'
+              mode: 'no-cors'
             });
-            if (!resp.ok && resp.type !== 'opaque') {
-              throw new Error('Server antwortete mit ' + resp.status);
-            }
+            // mode: 'no-cors' returns opaque response — we trust GAS handled it
           } else {
             // Kein Endpoint konfiguriert — Demo-Hinweis
             console.log('Feedback (Demo-Modus, kein GAS-Endpoint):', payload);
