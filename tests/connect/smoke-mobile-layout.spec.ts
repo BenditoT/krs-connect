@@ -30,7 +30,9 @@ test.describe('Mobile-Layout (Demo)', () => {
     // Sichtbar: die wichtigsten Nav-Icons
     await expect(page.locator('button[aria-label="Teams & Kanäle"]').first()).toBeVisible();
     await expect(page.locator('button[aria-label="Chats"]').first()).toBeVisible();
-    await expect(page.locator('button[aria-label="Dateiablage"]').first()).toBeVisible();
+    // v4.18.0: Dateiablage ist jetzt ein direkter <a>-Link (kein Modal mehr) —
+    // Selektor bewusst ohne Tag-Einschränkung, damit er button/a gleichermaßen findet.
+    await expect(page.locator('[aria-label="Dateiablage (Nextcloud)"]').first()).toBeVisible();
     // Abmelden bleibt erreichbar
     await expect(page.locator('button[aria-label="Abmelden"]').first()).toBeVisible();
   });

@@ -170,26 +170,9 @@ test.describe('Team-Links — UI (Demo)', () => {
     await expect(dialog).toContainText(/http:\/\/ oder https:\/\//);
   });
 
-  test('Dateiablage-Modal (Sidebar) zeigt weiterhin Nextcloud-Hinweis und zusätzlich den Team-Links-Bereich', async ({ connectPage: page }) => {
-    // Erst Team wählen, damit das Modal die Team-Links kennt
-    const teamBtn = page.locator('.list-item', { hasText: 'Kollegium' }).first();
-    if (await teamBtn.count() === 0) {
-      test.skip(true, 'Team „Kollegium" nicht gefunden — UI-Variante');
-    }
-    await teamBtn.click();
-
-    const navBtn = page.locator('button[aria-label="Dateiablage"]').first();
-    if (await navBtn.count() === 0) {
-      test.skip(true, 'Dateiablage-Nav-Button nicht gefunden — UI-Variante');
-    }
-    await navBtn.click();
-
-    const dialog = page.locator('.modal-overlay[aria-label="Dateiablage"]').first();
-    await expect(dialog).toBeVisible({ timeout: 5_000 });
-    // Bestehender Platzhalter (v4.7.0, v4.16.0: Nextcloud statt iServ) bleibt erhalten …
-    await expect(dialog).toContainText(/Nextcloud/i);
-    await expect(dialog.locator('a[target="_blank"]').first()).toHaveAttribute('href', 'https://cloud.realschule-schriesheim.de');
-    // … und der neue Team-Links-Bereich erscheint darunter
-    await expect(dialog.locator('[data-testid="team-links-section"]').first()).toBeVisible({ timeout: 5_000 });
-  });
+  // v4.18.0: Das Dateiablage-Modal (Sidebar) wurde entfernt — der Nav-Button
+  // ist jetzt ein Direktlink zur Nextcloud, ohne eingebetteten Team-Links-
+  // Bereich. Siehe smoke-dateiablage.spec.ts (Modal wirklich weg) und
+  // smoke-dateiablage-direktlink.spec.ts (Direktlink-Verhalten). Die
+  // Team-Links selbst bleiben oben über den Team-Tab „📁 Dateiablage" getestet.
 });
