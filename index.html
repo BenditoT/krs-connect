@@ -1149,6 +1149,11 @@
     .team-hide-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); opacity: 0; background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: opacity 0.15s; }
     .team-item:hover .team-hide-btn { opacity: 1; }
     .team-hide-btn:hover { color: var(--danger); }
+    /* v4.19.0: Stummschalten — zweiter Icon-Button links neben team-hide-btn */
+    .team-mute-btn { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); opacity: 0; background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; font-size: 12px; transition: opacity 0.15s; }
+    .team-item:hover .team-mute-btn { opacity: 1; }
+    .team-mute-btn:hover { color: var(--accent-orange); }
+    .team-mute-btn.active { opacity: 1; color: var(--accent-orange); }
     .hidden-teams-toggle { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px; width: 100%; transition: color 0.15s; }
     .hidden-teams-toggle:hover { color: var(--text-primary); }
 
@@ -1308,6 +1313,9 @@
     .update-banner button:hover { filter: brightness(0.96); }
     .update-banner .later { background: transparent; color: #fff; text-decoration: underline; font-weight: 500; padding: 8px 6px; }
     .app-version { font-size: 11px; color: var(--text-muted); text-align: center; padding: 4px 0 2px; letter-spacing: 0.3px; }
+    /* v4.19.0: dezenter Hilfe-Link neben der Versionsanzeige */
+    .app-help-link { display: block; text-align: center; font-size: 11px; color: var(--text-muted); text-decoration: none; padding: 0 0 6px; }
+    .app-help-link:hover { color: var(--text-primary); text-decoration: underline; }
 
     @media (max-width: 768px) {
       .toast-container { top: 8px; right: 8px; left: 8px; }
@@ -3489,6 +3497,25 @@
         }
       }
 
+      // ── Stummschalten (mute-Flag) ─ v4.19.0 ─────────────────────────
+      // kind: 'team' (Kernscope; 'channel' wäre analog erweiterbar).
+      // Rein client-seitig/localStorage: Benachrichtigungs-Präferenz ist
+      // geräte-/browserbezogen, kein Server-Roundtrip/Schema-Änderung nötig
+      // (siehe Scope-Grenzen: keine RLS-/Backend-Änderungen). Eigener
+      // Key-Namespace ('krs-muted-…'), damit sich Mute und das bestehende
+      // Ausblenden-Feature (Sprint 4, 'krs-hidden-…') nicht überschreiben.
+      _mutedLsKey(kind, userId) { return 'krs-muted-' + kind + '-' + (userId != null ? userId : 'anon'); }
+      async getMutedIds(kind, userId) {
+        try { return new Set(JSON.parse(localStorage.getItem(this._mutedLsKey(kind, userId)) || '[]')); }
+        catch (e) { return new Set(); }
+      }
+      async setMuted(kind, id, userId, muted) {
+        const set = await this.getMutedIds(kind, userId);
+        if (muted) set.add(id); else set.delete(id);
+        try { localStorage.setItem(this._mutedLsKey(kind, userId), JSON.stringify(Array.from(set))); } catch (e) {}
+        return true;
+      }
+
       async getMessages(conversationId, limit = 50, offset = 0) {
         if (this.isDemo) return [...(MOCK_MESSAGES[conversationId] || [])];
         try {
@@ -5088,7 +5115,7 @@
     // WICHTIG: Bei JEDEM Release erhöhen — der Update-Checker (UpdateBanner)
     // vergleicht diese laufende Version mit der live ausgelieferten index.html
     // und blendet bei Unterschied einen „Neue Version verfügbar"-Hinweis ein.
-    window.KRS_VERSION = '4.17.0';
+    window.KRS_VERSION = '4.19.0';
     // v4.14.0: Ziel-URL des Hub-Links, als Konstante exponiert — Test-Hook, damit
     // Playwright den Klick-Handler prüfen kann, ohne wirklich zu navigieren.
     // Aus tenant.js (TENANT-SPEC.md 2.4) — leer, wenn hub.enabled:false.
@@ -7530,9 +7557,10 @@
     const FEEDBACK_GAS_URL = window.T ? window.T('feedback.gasUrl', '') : '';
     window.__krsFeedbackGasUrl = FEEDBACK_GAS_URL; // Test-Hook: smoke-tenant prüft leer ⇒ kein Fremd-Sheet
 
-    // ── Dateiablage (v4.12.0, v4.16.0: Umstieg von iServ auf Nextcloud) ────
-    // Der Platzhalter aus v4.7.0 bleibt — pro Team pflegbare, benannte Links
-    // (team_links). KEIN eigener Datei-Speicher; nur Verweise auf die
+    // ── Dateiablage (v4.12.0, v4.16.0: Umstieg von iServ auf Nextcloud,
+    // v4.18.0: Sidebar-Button ist jetzt ein Direktlink, kein Modal mehr) ────
+    // Pro Team pflegbare, benannte Links (team_links) bleiben ein eigenes
+    // Feature (Tab im Team). KEIN eigener Datei-Speicher; nur Verweise auf die
     // Nextcloud-/Team-Ordner u. Ä. Leer ⇒ Karte ausgeblendet (Sprint-S2-Punkt 8).
     const NEXTCLOUD_FILES_URL = window.T ? window.T('links.nextcloudUrl', '') : '';
 
@@ -7567,8 +7595,8 @@
           teamName && React.createElement('p', { style: { fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px 0' } }, 'Gilt für das Team „' + teamName + '".'),
           React.createElement('input', {
             'data-testid': 'team-link-titel',
-            placeholder: 'Titel (z. B. „iServ-Ordner Fachschaft")',
-            'aria-label': 'Titel (z. B. „iServ-Ordner Fachschaft")',
+            placeholder: 'Titel (z. B. „Nextcloud-Ordner Fachschaft")',
+            'aria-label': 'Titel (z. B. „Nextcloud-Ordner Fachschaft")',
             value: form.titel, autoFocus: true, maxLength: 120,
             onChange: setField('titel'),
             onKeyDown: (e) => { if (e.key === 'Escape') onClose(); }
@@ -7652,7 +7680,7 @@
       return React.createElement('div', { 'data-testid': 'team-links-section' },
         loading && React.createElement('p', { style: { fontSize: '13px', color: 'var(--text-muted)' } }, 'Links werden geladen …'),
         !loading && links.length === 0 && React.createElement('p', { style: { fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 12px' } },
-          'Noch keine Links in diesem Team. Lege den ersten an — z. B. zum iServ- oder Nextcloud-Ordner.'),
+          'Noch keine Links in diesem Team. Lege den ersten an — z. B. zum Nextcloud-Ordner.'),
         !loading && links.map(l =>
           React.createElement('div', { key: l.id, 'data-testid': 'team-link-item', style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: '8px' } },
             React.createElement('span', { style: { fontSize: '18px', flex: '0 0 auto' }, 'aria-hidden': 'true' }, l.icon || '🔗'),
@@ -7879,50 +7907,11 @@
       );
     }
 
-    // Dateiablage-Modal (Platzhalter aus v4.7.0, erweitert in v4.12.0,
-    // v4.16.0: Umstieg auf Nextcloud): Nextcloud-Hinweis; darunter
-    // erscheinen die Links des gewählten Teams.
-    function FilesPlaceholderModal({ onClose, team, dataService, user, isTeamAdmin }) {
-      React.useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-      }, [onClose]);
-      return React.createElement('div', { className: 'modal-overlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Dateiablage', onClick: onClose },
-        React.createElement('div', { className: 'modal', onClick: e => e.stopPropagation(), style: { width: '520px', maxWidth: '96vw' } },
-          React.createElement('div', { className: 'modal-header' },
-            React.createElement('h3', null, '📁 Dateiablage'),
-            React.createElement('button', { className: 'icon-btn', onClick: onClose, title: 'Schließen', 'aria-label': 'Schließen', dangerouslySetInnerHTML: { __html: Icons.x } })
-          ),
-          React.createElement('div', { className: 'modal-body' },
-            React.createElement('div', {
-              style: { background: 'var(--accent-light)', color: 'var(--text-primary)', borderRadius: 'var(--radius)', padding: '14px 16px', fontSize: '14px', lineHeight: 1.5, marginBottom: '16px' }
-            },
-              React.createElement('strong', null, 'In Arbeit: '),
-              'Eine eigene Dateiablage direkt in ' + (window.T ? window.T('app.name', 'der App') : 'der App') + ' ist in Arbeit. Dateien liegen dann an einem Ort, mit Versionen und Freigaben.'
-            ),
-            React.createElement('p', { style: { fontSize: '14px', color: 'var(--text-secondary)', margin: '0 0 16px' } },
-              'Bis dahin nutzt bitte die ', React.createElement('strong', null, 'Nextcloud-Dateiablage'), ' der Schule für gemeinsame Dateien.'
-            ),
-            React.createElement('a', {
-              href: NEXTCLOUD_FILES_URL, target: '_blank', rel: 'noopener noreferrer',
-              style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', boxSizing: 'border-box', padding: '12px 16px', background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', fontSize: '15px', fontWeight: 600, textDecoration: 'none', minHeight: '48px' }
-            }, '🔗 Dateiablage (Nextcloud) öffnen'),
-            React.createElement('p', { style: { fontSize: '12px', color: 'var(--text-muted)', margin: '12px 0 0', textAlign: 'center' } }, 'Öffnet ' + (function () { try { return new URL(NEXTCLOUD_FILES_URL).host; } catch (e) { return NEXTCLOUD_FILES_URL; } })() + ' in einem neuen Tab (Login mit deinem Schul-Zugang).'),
-            // v4.12.0: Links des aktuell gewählten Teams direkt im Modal
-            React.createElement('div', { style: { borderTop: '1px solid var(--border)', margin: '16px -20px 0', padding: '14px 20px 0' } },
-              team && dataService
-                ? React.createElement(React.Fragment, null,
-                    React.createElement('h4', { style: { margin: '0 0 10px', fontSize: '14px' } }, '🔗 Links für „' + team.name + '"'),
-                    React.createElement(TeamLinksSection, { team, dataService, user, isTeamAdmin })
-                  )
-                : React.createElement('p', { style: { fontSize: '13px', color: 'var(--text-muted)', margin: 0 } },
-                    'Tipp: Wähle links ein Team, dann kannst du hier dessen Dateiablage-Links sehen und pflegen — oder nutze den Tab „📁 Dateiablage" direkt im Team.')
-            )
-          )
-        )
-      );
-    }
+    // v4.18.0: FilesPlaceholderModal (Zwischenfenster-Modal aus v4.7.0/v4.12.0/
+    // v4.16.0) wurde entfernt — der Sidebar-Button „Dateiablage" verlinkt jetzt
+    // direkt auf NEXTCLOUD_FILES_URL (kein Modal, kein showFiles-State mehr).
+    // Die Team-Dateiablage-Links (TeamLinksSection) bleiben unverändert im
+    // eigenen Team-Tab „📁 Dateiablage" erreichbar.
 
     function FeedbackModal({ user, dataService, onClose, onOpenBoard, canGoBack }) {
       const [category, setCategory] = useState('');
@@ -8345,6 +8334,14 @@
     // ── Changelog ("Was ist neu") ────────────────────────────────────
     // Neueste Version zuerst. Wird im Einstellungen-Panel angezeigt.
     const KRS_CHANGELOG = [
+      { v: '4.19.0', date: '30.07.2026', items: [
+        'Teams lassen sich jetzt stummschalten (🔔/🔕-Symbol neben jedem Team): keine Benachrichtigungen mehr und keine Zähler-Anzeige, bis du die Stummschaltung wieder aufhebst',
+        'Neuer dezenter Hilfe-Link („❓ Hilfe") unten in der Seitenleiste — führt direkt zur Kollegiums-Anleitung'
+      ] },
+      { v: '4.18.0', date: '30.07.2026', items: [
+        'Dateiablage öffnet jetzt direkt die Nextcloud der Schule — ohne Zwischenfenster',
+        'Wortlaut überall auf Nextcloud umgestellt (iServ war noch an ein paar Stellen zu lesen)'
+      ] },
       { v: '4.17.0', date: '22.07.2026', items: [
         'Barrierefreiheit deutlich verbessert: Tastaturbedienung für Dialoge (Fokus bleibt beim Öffnen im Dialog, springt beim Schließen zurück), Sprung-Link „Zum Inhalt springen", bessere Farbkontraste bei Profil-/Team-Farben, klarere Überschriften-Struktur für Screenreader'
       ] },
@@ -8387,6 +8384,11 @@
       { label: 'April 2026 — Ausbau', date: '07.–21.04.2026', items: ['Rich-Text, Umfragen, Weiterleiten, Lesezeichen, angeheftete Beiträge', 'Admin-Panel, Fehlerabfang, Offline-Erkennung'] },
       { label: 'März 2026 — Start', date: '20.–30.03.2026', items: ['Erster Prototyp: Teams, Kanäle, Threads, Emojis', 'Login & Sicherheits-Regeln', 'Ungelesen-Zähler', 'KRS Hub als gemeinsames Dach', 'Klassenarbeitsplan live'] },
     ];
+    // Test-Hook: KRS_CHANGELOG lebt in diesem <script type="module">-Scope und ist
+    // daher (anders als window.KRS_VERSION) von außen nicht als freie Kennung
+    // sichtbar. smoke-version-consistency.spec.ts vergleicht window.KRS_VERSION
+    // gegen window.KRS_CHANGELOG[0].v.
+    window.KRS_CHANGELOG = KRS_CHANGELOG;
 
     // ── Einstellungen-Panel (⚙️) — v4.10.0 ───────────────────────────
     // Bündelt Benachrichtigungen, Lesebestätigungen, Hilfe/Datenschutz und
@@ -8589,6 +8591,7 @@
       const [replies, setReplies] = useState([]);
       const [openThread, setOpenThread] = useState(null);
       const [hiddenTeams, setHiddenTeams] = useState(new Set());
+      const [mutedTeams, setMutedTeams] = useState(new Set()); // v4.19.0: Stummschaltung
       const [hiddenConversations, setHiddenConversations] = useState(new Set());
       const [showHiddenTeams, setShowHiddenTeams] = useState(false);
       const [archivedTeams, setArchivedTeams] = useState([]);
@@ -8609,6 +8612,7 @@
       return { teams, setTeams, selectedTeam, setSelectedTeam, channels, setChannels,
         selectedChannel, setSelectedChannel, posts, setPosts, replies, setReplies,
         openThread, setOpenThread, hiddenTeams, setHiddenTeams, showHiddenTeams, setShowHiddenTeams,
+        mutedTeams, setMutedTeams,
         archivedTeams, setArchivedTeams, showArchivedTeams, setShowArchivedTeams,
         hiddenConversations, setHiddenConversations, showHiddenChats, setShowHiddenChats,
         postsLoading, setPostsLoading, hasMorePosts, setHasMorePosts, toggleTeamVisibility };
@@ -8635,7 +8639,7 @@
       const [showOnlinePanel, setShowOnlinePanel] = useState(false);
       const [showFeedback, setShowFeedback] = useState(false);
       const [showFeedbackBoard, setShowFeedbackBoard] = useState(false);
-      const [showFiles, setShowFiles] = useState(false); // Dateiablage-Platzhalter (Nextcloud kommt, bis dahin iServ)
+      // v4.18.0: showFiles/setShowFiles entfernt — Dateiablage ist jetzt ein Direktlink, kein Modal mehr.
       const [showBulkTeams, setShowBulkTeams] = useState(false);
       const [showProfile, setShowProfile] = useState(false);
       const [showPrivacy, setShowPrivacy] = useState(false);
@@ -8661,7 +8665,6 @@
       return { modalStack, openModal, backModal, closeModals,
         showOnlinePanel, setShowOnlinePanel, showFeedback, setShowFeedback,
         showFeedbackBoard, setShowFeedbackBoard,
-        showFiles, setShowFiles,
         showBulkTeams, setShowBulkTeams,
         showProfile, setShowProfile, showPrivacy, setShowPrivacy,
         showOnboarding, setShowOnboarding, showCreateTeam, setShowCreateTeam,
@@ -8847,6 +8850,7 @@
       const { teams, setTeams, selectedTeam, setSelectedTeam, channels, setChannels,
         selectedChannel, setSelectedChannel, posts, setPosts, replies, setReplies,
         openThread, setOpenThread, hiddenTeams, setHiddenTeams, showHiddenTeams, setShowHiddenTeams,
+        mutedTeams, setMutedTeams,
         archivedTeams, setArchivedTeams, showArchivedTeams, setShowArchivedTeams,
         hiddenConversations, setHiddenConversations, showHiddenChats, setShowHiddenChats,
         postsLoading, setPostsLoading, hasMorePosts, setHasMorePosts, toggleTeamVisibility } = teamsState;
@@ -8863,7 +8867,6 @@
       const { modalStack, openModal, backModal, closeModals,
         showOnlinePanel, setShowOnlinePanel, showFeedback, setShowFeedback,
         showFeedbackBoard, setShowFeedbackBoard,
-        showFiles, setShowFiles,
         showBulkTeams, setShowBulkTeams,
         showProfile, setShowProfile, showPrivacy, setShowPrivacy,
         showOnboarding, setShowOnboarding, showCreateTeam, setShowCreateTeam,
@@ -9156,6 +9159,11 @@
           const hiddenT = await dataService.getHiddenIds('team', selectedUser.id);
           if (hiddenT && hiddenT.size) setHiddenTeams(hiddenT);
         } catch (e) {}
+        // Stummgeschaltete Teams laden (persistiert, rein lokal) — v4.19.0
+        try {
+          const mutedT = await dataService.getMutedIds('team', selectedUser.id);
+          if (mutedT && mutedT.size) setMutedTeams(mutedT);
+        } catch (e) {}
         // Load conversations + all users for chat
         const convData = await dataService.getConversations(selectedUser.id);
         setConversations(convData || []);
@@ -9412,6 +9420,14 @@
       selectedConversationRef.current = selectedConversation;
       const selectedChannelRef = useRef(selectedChannel);
       selectedChannelRef.current = selectedChannel;
+      // v4.19.0: Refs für Stummschaltung — verhindert Stale Closure im
+      // unten stehenden postgres_changes-Listener (der nur bei [user,
+      // dataService] neu abonniert, mutedTeams/channelTeamMap aber
+      // während der Session wachsen bzw. sich ändern können).
+      const mutedTeamsRef = useRef(mutedTeams);
+      mutedTeamsRef.current = mutedTeams;
+      const channelTeamMapRef = useRef(channelTeamMap);
+      channelTeamMapRef.current = channelTeamMap;
 
       // Global listener for new messages (unread badges)
       useEffect(() => {
@@ -9455,13 +9471,19 @@
               next.set(newPost.channel_id, (next.get(newPost.channel_id) || 0) + 1);
               return next;
             });
+            // v4.19.0: Stummgeschaltetes Team? — der Unread-Zähler oben ist
+            // bereits erhöht, hier geht es nur noch um Benachrichtigungen.
+            const postTeamId = channelTeamMapRef.current.get(newPost.channel_id);
+            const isMutedTeamPost = postTeamId != null && mutedTeamsRef.current.has(postTeamId);
             // Browser-Notification (dringend und @alle erhalten spezielle Behandlung)
             const isUrgentPost = newPost.is_urgent;
             const hasMentionAll = (newPost.content || '').toLowerCase().includes('@alle');
             const hasMentionMe = user && (newPost.content || '').toLowerCase().includes(('@' + (user.display_name || '')).toLowerCase());
             const notifTitle = isUrgentPost ? '🚨 DRINGEND' : hasMentionAll ? '📢 @alle' : hasMentionMe ? '💬 Du wurdest erwähnt' : '📢 Neuer Beitrag';
-            // Dringend + @alle: Notification auch wenn App im Fokus
-            if (isUrgentPost || hasMentionAll || hasMentionMe) {
+            if (isMutedTeamPost) {
+              // Stummgeschaltet: keine Push-Notification, kein Toast — Team bewusst stumm.
+            } else if (isUrgentPost || hasMentionAll || hasMentionMe) {
+              // Dringend + @alle: Notification auch wenn App im Fokus
               try {
                 if (notificationsEnabled && notificationPermission === 'granted') {
                   const n = new Notification(notifTitle, {
@@ -9599,6 +9621,14 @@
         if (dataService && user) dataService.setHidden('team', teamId, user.id, willHide);
         showToast(willHide ? 'Forum ausgeblendet' : 'Forum wieder eingeblendet', 'info');
       }, [hiddenTeams, dataService, user]);
+
+      // ── Stummschalten persistierend (rein lokal) — v4.19.0 ──
+      const handleToggleTeamMute = useCallback((teamId) => {
+        const willMute = !mutedTeams.has(teamId);
+        setMutedTeams(prev => { const n = new Set(prev); if (willMute) n.add(teamId); else n.delete(teamId); return n; });
+        if (dataService && user) dataService.setMuted('team', teamId, user.id, willMute);
+        showToast(willMute ? 'Team stummgeschaltet — keine Benachrichtigungen mehr' : 'Stummschaltung aufgehoben', 'info');
+      }, [mutedTeams, dataService, user]);
 
       const handleToggleConvHidden = useCallback((convId) => {
         const willHide = !hiddenConversations.has(convId);
@@ -9862,13 +9892,23 @@
                     },
                       React.createElement('div', { style: { width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: team.icon_color, borderRadius: 'var(--radius)', color: 'white', fontSize: '12px', fontWeight: '600' } }, team.icon_text),
                       React.createElement('span', { className: 'list-item-text' }, team.name),
+                      // v4.19.0: sichtbarer Status — 🔕 neben stummgeschalteten Teams (immer sichtbar, nicht nur bei Hover)
+                      mutedTeams.has(team.id) && React.createElement('span', { title: 'Stummgeschaltet', 'aria-label': 'Stummgeschaltet', style: { fontSize: '11px', flexShrink: 0 } }, '🔕'),
                       (() => {
                         const teamUnread = Array.from(unreadPostChannels.entries())
                           .filter(([chId]) => channelTeamMap.get(chId) === team.id)
                           .reduce((sum, [, count]) => sum + count, 0);
-                        return teamUnread > 0 ? React.createElement('span', { className: 'unread-badge', style: { marginLeft: 'auto' }, 'aria-label': teamUnread + ' ungelesene Nachrichten' }, teamUnread) : null;
+                        // v4.19.0: Zähler läuft intern weiter, Badge wird bei Stummschaltung nur nicht angezeigt.
+                        return (teamUnread > 0 && !mutedTeams.has(team.id)) ? React.createElement('span', { className: 'unread-badge', style: { marginLeft: 'auto' }, 'aria-label': teamUnread + ' ungelesene Nachrichten' }, teamUnread) : null;
                       })()
                     ),
+                    React.createElement('button', {
+                      className: 'team-mute-btn' + (mutedTeams.has(team.id) ? ' active' : ''),
+                      onClick: (e) => { e.stopPropagation(); handleToggleTeamMute(team.id); },
+                      title: mutedTeams.has(team.id) ? 'Stummschaltung aufheben' : 'Stummschalten',
+                      'aria-label': mutedTeams.has(team.id) ? 'Stummschaltung aufheben' : 'Team stummschalten',
+                      'data-testid': 'team-mute-btn'
+                    }, mutedTeams.has(team.id) ? '🔕' : '🔔'),
                     React.createElement('button', { className: 'team-hide-btn', onClick: (e) => { e.stopPropagation(); handleToggleTeamHidden(team.id); }, title: 'Forum ausblenden', 'data-testid': 'team-hide' }, '👁')
                   )
                 ),
@@ -9954,7 +9994,8 @@
                 },
                   React.createElement('span', { style: { fontSize: '12px' } }, '#'),
                   React.createElement('span', { className: 'list-item-text' + (unreadCount > 0 ? ' channel-unread' : '') }, ch.name),
-                  unreadCount > 0 && React.createElement('span', { className: 'unread-badge' }, unreadCount)
+                  // v4.19.0: Team stummgeschaltet ⇒ auch die Kanal-Badges im Team ausblenden (Zähler bleibt intern erhalten)
+                  unreadCount > 0 && !mutedTeams.has(selectedTeam?.id) && React.createElement('span', { className: 'unread-badge' }, unreadCount)
                 );
               })
             )
@@ -9987,7 +10028,7 @@
             ),
             React.createElement('div', { className: 'content-body' },
               React.createElement('p', { style: { fontSize: '13px', color: 'var(--text-muted)', margin: 0 } },
-                'Benannte Links zu gemeinsamen Ordnern (z. B. iServ oder Nextcloud). Die Dateien selbst bleiben dort — ' + (window.T ? window.T('app.name', 'die App') : 'die App') + ' speichert nur die Verweise.'),
+                'Benannte Links zu gemeinsamen Ordnern (z. B. Nextcloud). Die Dateien selbst bleiben dort — ' + (window.T ? window.T('app.name', 'die App') : 'die App') + ' speichert nur die Verweise.'),
               React.createElement(TeamLinksSection, {
                 team: selectedTeam, dataService, user,
                 isTeamAdmin: userTeamRole === 'admin' || user?.role === 'admin'
@@ -10250,12 +10291,16 @@
             ),
             // v4.10.0: Suche & Gespeichert sind in die Ansichten gewandert (🔍 neben Überschrift, 🔖 oben in der Chat-Spalte)
             // TENANT-SPEC.md Sprint-S2-Punkt 8: nur rendern, wenn links.nextcloudUrl gesetzt ist.
-            !!NEXTCLOUD_FILES_URL && React.createElement('button', {
-              className: 'nav-item' + (showFiles ? ' active' : ''),
-              onClick: () => setShowFiles(true),
+            // v4.18.0: Direktlink statt Modal — ein Klick öffnet die Nextcloud der Schule in neuem Tab.
+            !!NEXTCLOUD_FILES_URL && React.createElement('a', {
+              className: 'nav-item',
+              href: NEXTCLOUD_FILES_URL,
+              target: '_blank',
+              rel: 'noopener noreferrer',
               title: 'Dateiablage (Nextcloud)',
-              'aria-label': 'Dateiablage',
-              'aria-current': showFiles ? 'page' : undefined
+              'aria-label': 'Dateiablage (Nextcloud)',
+              'data-testid': 'nav-dateiablage',
+              style: { textDecoration: 'none' }
             },
               React.createElement('span', { dangerouslySetInnerHTML: { __html: Icons.files } })
             ),
@@ -10278,6 +10323,16 @@
             title: 'Feedback geben & alle Rückmeldungen ansehen'
           }, '📣 Feedback', React.createElement('span', { className: 'beta-tag' }, 'BETA')),
           React.createElement('div', { className: 'app-version' }, (window.T ? window.T('app.name', 'Die App') : 'Die App') + ' v' + window.KRS_VERSION + ' · Beta'),
+          // v4.19.0: dezenter Hilfe-Link zur Kollegiums-Anleitung (separates Repo, GitHub Pages)
+          React.createElement('a', {
+            href: 'https://kurpfalz-realschule.github.io/krs-hub/hilfe/',
+            target: '_blank',
+            rel: 'noopener',
+            className: 'app-help-link',
+            title: 'Anleitung für das Kollegium (neuer Tab)',
+            'aria-label': 'Hilfe / Anleitung öffnen (neuer Tab)',
+            'data-testid': 'app-help-link'
+          }, '❓ Hilfe'),
           React.createElement('div', { className: 'sidebar-bottom' },
             React.createElement('button', {
               className: 'online-indicator',
@@ -10369,12 +10424,7 @@
         React.createElement(UpdateBanner, null),
         topModal === 'feedback' && React.createElement(FeedbackModal, { user, dataService, onClose: backModal, canGoBack, onOpenBoard: () => openModal('feedbackBoard') }),
         topModal === 'feedbackBoard' && React.createElement(FeedbackBoardModal, { dataService, isAdmin: user?.role === 'admin', onClose: backModal, canGoBack, onNewFeedback: () => openModal('feedback') }),
-        showFiles && React.createElement(FilesPlaceholderModal, {
-          onClose: () => setShowFiles(false),
-          // v4.12.0: Links des gewählten Teams direkt im Dateiablage-Modal
-          team: selectedTeam, dataService, user,
-          isTeamAdmin: userTeamRole === 'admin' || user?.role === 'admin'
-        }),
+        // v4.18.0: FilesPlaceholderModal entfernt — Dateiablage ist jetzt Direktlink (siehe Sidebar-Button oben).
         showBulkTeams && React.createElement(BulkDeleteTeamsModal, {
           teams, archivedTeams, dataService,
           onClose: () => setShowBulkTeams(false),
