@@ -49,7 +49,11 @@ test.describe('Kanal anlegen — UI (Demo)', () => {
     await expect(input).toBeVisible();
     const name = 'UI-Kanal ' + Date.now();
     await input.fill(name);
-    await input.press('Enter');
+    // Über den echten „Erstellen"-Button statt der Enter-Taste: der Dialog hat
+    // zwar zusätzlich einen onKeyDown-Enter-Handler, aber der Button-Klick ist
+    // der primäre, dokumentierte UI-Weg und ruft denselben handleCreateChannel
+    // auf — robuster als sich auf Tastatur-Timing/Fokus im Test zu verlassen.
+    await dialog.getByRole('button', { name: 'Erstellen' }).click();
 
     await expect(dialog).toHaveCount(0, { timeout: 4_000 });
     await expect(page.getByText(name)).toBeVisible({ timeout: 4_000 });
