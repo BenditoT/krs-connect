@@ -5115,7 +5115,7 @@
     // WICHTIG: Bei JEDEM Release erhöhen — der Update-Checker (UpdateBanner)
     // vergleicht diese laufende Version mit der live ausgelieferten index.html
     // und blendet bei Unterschied einen „Neue Version verfügbar"-Hinweis ein.
-    window.KRS_VERSION = '4.19.0';
+    window.KRS_VERSION = '4.19.1';
     // v4.14.0: Ziel-URL des Hub-Links, als Konstante exponiert — Test-Hook, damit
     // Playwright den Klick-Handler prüfen kann, ohne wirklich zu navigieren.
     // Aus tenant.js (TENANT-SPEC.md 2.4) — leer, wenn hub.enabled:false.
@@ -8334,6 +8334,9 @@
     // ── Changelog ("Was ist neu") ────────────────────────────────────
     // Neueste Version zuerst. Wird im Einstellungen-Panel angezeigt.
     const KRS_CHANGELOG = [
+      { v: '4.19.1', date: '31.07.2026', items: [
+        'Neuen Kanal per Enter anlegen: Dialog ging manchmal sofort wieder auf, statt zu schließen — jetzt zuverlässig behoben'
+      ] },
       { v: '4.19.0', date: '30.07.2026', items: [
         'Teams lassen sich jetzt stummschalten (🔔/🔕-Symbol neben jedem Team): keine Benachrichtigungen mehr und keine Zähler-Anzeige, bis du die Stummschaltung wieder aufhebst',
         'Neuer dezenter Hilfe-Link („❓ Hilfe") unten in der Seitenleiste — führt direkt zur Kollegiums-Anleitung'
@@ -10142,20 +10145,31 @@
           onDelete: handleDeleteTeam
         }),
         // Channel erstellen Dialog
+        // v4.19.1: echtes <form onSubmit> statt onKeyDown==='Enter' auf dem Input.
+        // Grund: Der rohe Tastatur-Handler schloss den Dialog erst nach dem
+        // await in handleCreateChannel (Microtask) — der globale Focus-Trap
+        // (reconcile()) gibt den Fokus dabei synchron an den auslösenden
+        // „+"-Button zurück, sobald der Dialog aus dem DOM verschwindet. Landet
+        // dort noch das keyup derselben Enter-Taste, aktiviert der Browser den
+        // fokussierten Button nativ erneut → der Dialog ging sofort wieder auf.
+        // Ein natives Formular-Submit (wie beim Team-Anlegen-Dialog) konsumiert
+        // Enter direkt beim Absenden und umgeht den Race komplett.
         showCreateChannel && React.createElement('div', { className: 'modal-overlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Neuen Kanal erstellen', onClick: () => setShowCreateChannel(false) },
           React.createElement('div', { className: 'channel-dialog', onClick: e => e.stopPropagation() },
             React.createElement('h3', null, '# Neuen Kanal erstellen'),
             React.createElement('p', { style: { fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px 0' } }, 'Kanal wird in „' + (selectedTeam?.name || '') + '" erstellt.'),
+            React.createElement('form', { onSubmit: (e) => { e.preventDefault(); const inp = document.getElementById('new-channel-name'); if (inp) handleCreateChannel(inp.value); } },
             React.createElement('input', {
               id: 'new-channel-name',
               'aria-label': 'Kanalname',
               placeholder: 'Kanalname (z.\u00a0B. „Vertretung")',
               autoFocus: true,
-              onKeyDown: (e) => { if (e.key === 'Enter') { handleCreateChannel(e.target.value); } if (e.key === 'Escape') setShowCreateChannel(false); }
+              onKeyDown: (e) => { if (e.key === 'Escape') setShowCreateChannel(false); }
             }),
             React.createElement('div', { className: 'dialog-actions' },
-              React.createElement('button', { onClick: () => setShowCreateChannel(false) }, 'Abbrechen'),
-              React.createElement('button', { className: 'btn-primary', onClick: () => { const inp = document.getElementById('new-channel-name'); if (inp) handleCreateChannel(inp.value); } }, 'Erstellen')
+              React.createElement('button', { type: 'button', onClick: () => setShowCreateChannel(false) }, 'Abbrechen'),
+              React.createElement('button', { type: 'submit', className: 'btn-primary' }, 'Erstellen')
+            )
             )
           )
         ),

@@ -49,13 +49,17 @@ test.describe('Kanal anlegen — UI (Demo)', () => {
     await expect(input).toBeVisible();
     const name = 'UI-Kanal ' + Date.now();
     await input.fill(name);
-    // Über den echten „Erstellen"-Button statt der Enter-Taste: der Dialog hat
-    // zwar zusätzlich einen onKeyDown-Enter-Handler, aber der Button-Klick ist
-    // der primäre, dokumentierte UI-Weg und ruft denselben handleCreateChannel
-    // auf — robuster als sich auf Tastatur-Timing/Fokus im Test zu verlassen.
-    await dialog.getByRole('button', { name: 'Erstellen' }).click();
+    // Enter im Namensfeld ist der primäre, erwartete UI-Weg (wie beim
+    // Team-Anlegen-Dialog) — seit v4.19.1 läuft das über ein echtes
+    // <form onSubmit>, das den Kanal anlegt und den Dialog zuverlässig
+    // schließt (siehe Changelog: vorher gab es einen Fokus-Restore-Race mit
+    // dem globalen Focus-Trap, der den Dialog sofort wieder öffnete).
+    await input.press('Enter');
 
     await expect(dialog).toHaveCount(0, { timeout: 4_000 });
-    await expect(page.getByText(name)).toBeVisible({ timeout: 4_000 });
+    // Gezielt auf die Kanalliste scopen: der neue Kanalname erscheint nach dem
+    // Anlegen mehrfach im DOM (Kanalliste, Ansichts-Überschrift, Erfolgs-Toast)
+    // — ein ungescoptes getByText(name) verletzt daher den Strict-Mode.
+    await expect(page.locator('.sidebar-list').getByText(name)).toBeVisible({ timeout: 4_000 });
   });
 });
